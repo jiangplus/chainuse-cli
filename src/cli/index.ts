@@ -60,6 +60,20 @@ import {
   handleSafeQueue,
 } from '../handlers/safe.js'
 import {
+  handleSwapQuote,
+  handleSwapExecute,
+  handleBridgeQuote,
+  handleBridgeStatus,
+} from '../handlers/swap.js'
+import {
+  handleAaveAccount,
+  handleAaveReserve,
+  handleAaveSupply,
+  handleAaveWithdraw,
+  handleAaveBorrow,
+  handleAaveRepay,
+} from '../handlers/aave.js'
+import {
   handleWcPair,
   handleWcApprove,
   handleWcReject,
@@ -1427,6 +1441,299 @@ export function buildCLI(): Command {
             )
           }
           console.log()
+        },
+        parentOpts
+      )
+      if (!result.ok) process.exit(exitCodeFor(result.error.code))
+    })
+
+  // ─── chain swap ────────────────────────────────────────────────────────────
+
+  const swapCmd = program.command('swap').description('Uniswap V4 token swaps')
+
+  swapCmd
+    .command('quote')
+    .description('Get a Uniswap V4 swap quote')
+    .requiredOption('--from <token>', 'Input token symbol or address (e.g. USDC or 0x...)')
+    .requiredOption('--to <token>', 'Output token symbol or address')
+    .requiredOption('--amount <amount>', 'Input amount (human-readable)')
+    .requiredOption('--owner <alias>', 'Account alias (used as default recipient)')
+    .option('--recipient <address>', 'Custom recipient address')
+    .option('--chain <id>', 'Chain ID or alias')
+    .option('--slippage-bps <bps>', 'Slippage tolerance in basis points (default: 50 = 0.5%)', (v) => Number(v))
+    .action(async (opts, cmd) => {
+      const parentOpts = cmd.parent?.parent?.opts() ?? {}
+      const result = await handleSwapQuote({
+        from: opts.from,
+        to: opts.to,
+        amount: opts.amount,
+        ownerAlias: opts.owner,
+        recipient: opts.recipient,
+        chain: opts.chain,
+        slippageBps: opts.slippageBps,
+      })
+      printResult(
+        result,
+        (data) => {
+          success(`Swap quote: ${data.amountIn} ${opts.from} → ${data.amountOut} ${opts.to}`)
+          label('Route', data.route)
+          label('Amount In', data.amountIn)
+          label('Amount Out', data.amountOut)
+          label('Min Out', data.amountOutMinimum)
+          label('Fee Tier', `${data.fee / 10000}%`)
+          label('Slippage', `${data.slippageBps / 100}%`)
+        },
+        parentOpts
+      )
+      if (!result.ok) process.exit(exitCodeFor(result.error.code))
+    })
+
+  swapCmd
+    .command('execute')
+    .description('Execute a Uniswap V4 swap')
+    .requiredOption('--from <token>', 'Input token symbol or address')
+    .requiredOption('--to <token>', 'Output token symbol or address')
+    .requiredOption('--amount <amount>', 'Input amount (human-readable)')
+    .requiredOption('--owner <alias>', 'Account alias')
+    .option('--recipient <address>', 'Custom recipient address')
+    .option('--chain <id>', 'Chain ID or alias')
+    .option('--slippage-bps <bps>', 'Slippage tolerance in basis points (default: 50)', (v) => Number(v))
+    .action(async (opts, cmd) => {
+      const parentOpts = cmd.parent?.parent?.opts() ?? {}
+      const result = await handleSwapExecute({
+        from: opts.from,
+        to: opts.to,
+        amount: opts.amount,
+        ownerAlias: opts.owner,
+        recipient: opts.recipient,
+        chain: opts.chain,
+        slippageBps: opts.slippageBps,
+      })
+      printResult(
+        result,
+        (data) => {
+          success('Swap executed')
+          label('Tx Hash', formatHash(data.hash))
+        },
+        parentOpts
+      )
+      if (!result.ok) process.exit(exitCodeFor(result.error.code))
+    })
+
+  // ─── chain bridge ──────────────────────────────────────────────────────────
+
+  const bridgeCmd = program.command('bridge').description('Cross-chain bridging via Squid Router')
+
+  bridgeCmd
+    .command('quote')
+    .description('Get a cross-chain bridge quote')
+    .requiredOption('--from-chain <id>', 'Source chain ID or alias')
+    .requiredOption('--to-chain <id>', 'Destination chain ID or alias')
+    .requiredOption('--from-token <token>', 'Source token symbol or address')
+    .requiredOption('--to-token <token>', 'Destination token symbol or address')
+    .requiredOption('--amount <amount>', 'Amount to bridge (human-readable)')
+    .requiredOption('--owner <alias>', 'Account alias')
+    .option('--to-address <address>', 'Custom destination address')
+    .option('--slippage-bps <bps>', 'Slippage tolerance in basis points (default: 50)', (v) => Number(v))
+    .action(async (opts, cmd) => {
+      const parentOpts = cmd.parent?.parent?.opts() ?? {}
+      const result = await handleBridgeQuote({
+        fromChain: opts.fromChain,
+        toChain: opts.toChain,
+        fromToken: opts.fromToken,
+        toToken: opts.toToken,
+        amount: opts.amount,
+        ownerAlias: opts.owner,
+        toAddress: opts.toAddress,
+        slippageBps: opts.slippageBps,
+      })
+      printResult(
+        result,
+        (data) => {
+          success(`Bridge quote: ${data.fromAmount} ${data.fromToken} → ${data.toAmount} ${data.toToken}`)
+          label('From', `${data.fromChain} → ${data.toChain}`)
+          label('Amount Out', data.toAmount)
+          label('Min Amount Out', data.toAmountMinimum)
+          label('Estimated Time', `${data.estimatedTimeSeconds}s`)
+          if (data.feeCosts.length > 0) {
+            label('Fees', data.feeCosts.map((f) => `${f.amount} ${f.token} (${f.name})`).join(', '))
+          }
+        },
+        parentOpts
+      )
+      if (!result.ok) process.exit(exitCodeFor(result.error.code))
+    })
+
+  bridgeCmd
+    .command('status')
+    .description('Check cross-chain bridge transaction status')
+    .requiredOption('--tx-hash <hash>', 'Source chain transaction hash')
+    .requiredOption('--from-chain <id>', 'Source chain ID or alias')
+    .requiredOption('--to-chain <id>', 'Destination chain ID or alias')
+    .action(async (opts, cmd) => {
+      const parentOpts = cmd.parent?.parent?.opts() ?? {}
+      const result = await handleBridgeStatus({
+        txHash: opts.txHash,
+        fromChain: opts.fromChain,
+        toChain: opts.toChain,
+      })
+      printResult(
+        result,
+        (data) => {
+          label('Status', formatStatus(data.status))
+          if (data.toChainTxHash) label('Destination Tx', formatHash(data.toChainTxHash))
+        },
+        parentOpts
+      )
+      if (!result.ok) process.exit(exitCodeFor(result.error.code))
+    })
+
+  // ─── chain aave ────────────────────────────────────────────────────────────
+
+  const aaveCmd = program.command('aave').description('Aave V3 lending and borrowing')
+
+  aaveCmd
+    .command('account')
+    .description('Show Aave V3 account health and positions')
+    .requiredOption('--owner <alias>', 'Account alias')
+    .option('--chain <id>', 'Chain ID or alias')
+    .action(async (opts, cmd) => {
+      const parentOpts = cmd.parent?.parent?.opts() ?? {}
+      const result = await handleAaveAccount({ ownerAlias: opts.owner, chain: opts.chain })
+      printResult(
+        result,
+        (data) => {
+          label('Total Collateral (USD)', data.totalCollateralUsd)
+          label('Total Debt (USD)', data.totalDebtUsd)
+          label('Available Borrows (USD)', data.availableBorrowsUsd)
+          label('Liquidation Threshold', data.currentLiquidationThreshold)
+          label('LTV', data.ltv)
+          label('Health Factor', data.healthFactor)
+        },
+        parentOpts
+      )
+      if (!result.ok) process.exit(exitCodeFor(result.error.code))
+    })
+
+  aaveCmd
+    .command('reserve')
+    .description('Show Aave V3 reserve position for a specific asset')
+    .requiredOption('--asset <token>', 'Token symbol or address')
+    .requiredOption('--owner <alias>', 'Account alias')
+    .option('--chain <id>', 'Chain ID or alias')
+    .action(async (opts, cmd) => {
+      const parentOpts = cmd.parent?.parent?.opts() ?? {}
+      const result = await handleAaveReserve({ asset: opts.asset, ownerAlias: opts.owner, chain: opts.chain })
+      printResult(
+        result,
+        (data) => {
+          label('Asset', data.asset)
+          label('Supplied (aToken)', data.currentATokenBalance)
+          label('Variable Debt', data.currentVariableDebt)
+          label('Stable Debt', data.currentStableDebt)
+          label('Supply APY', data.liquidityRate)
+          label('Used as Collateral', data.usageAsCollateralEnabled ? 'Yes' : 'No')
+        },
+        parentOpts
+      )
+      if (!result.ok) process.exit(exitCodeFor(result.error.code))
+    })
+
+  aaveCmd
+    .command('supply')
+    .description('Supply assets to Aave V3')
+    .requiredOption('--asset <token>', 'Token symbol or address')
+    .requiredOption('--amount <amount>', 'Amount to supply (human-readable)')
+    .requiredOption('--owner <alias>', 'Account alias')
+    .option('--chain <id>', 'Chain ID or alias')
+    .action(async (opts, cmd) => {
+      const parentOpts = cmd.parent?.parent?.opts() ?? {}
+      const result = await handleAaveSupply({ asset: opts.asset, amount: opts.amount, ownerAlias: opts.owner, chain: opts.chain })
+      printResult(
+        result,
+        (data) => {
+          success('Aave V3 supply completed')
+          label('Approve Tx', formatHash(data.approveTxHash))
+          label('Supply Tx', formatHash(data.supplyTxHash))
+        },
+        parentOpts
+      )
+      if (!result.ok) process.exit(exitCodeFor(result.error.code))
+    })
+
+  aaveCmd
+    .command('withdraw')
+    .description('Withdraw supplied assets from Aave V3')
+    .requiredOption('--asset <token>', 'Token symbol or address')
+    .requiredOption('--amount <amount>', 'Amount to withdraw (use "max" for full withdrawal)')
+    .requiredOption('--owner <alias>', 'Account alias')
+    .option('--to <address>', 'Recipient address (default: owner)')
+    .option('--chain <id>', 'Chain ID or alias')
+    .action(async (opts, cmd) => {
+      const parentOpts = cmd.parent?.parent?.opts() ?? {}
+      const result = await handleAaveWithdraw({ asset: opts.asset, amount: opts.amount, ownerAlias: opts.owner, to: opts.to, chain: opts.chain })
+      printResult(
+        result,
+        (data) => {
+          success('Aave V3 withdrawal completed')
+          label('Tx Hash', formatHash(data.txHash))
+        },
+        parentOpts
+      )
+      if (!result.ok) process.exit(exitCodeFor(result.error.code))
+    })
+
+  aaveCmd
+    .command('borrow')
+    .description('Borrow assets from Aave V3')
+    .requiredOption('--asset <token>', 'Token symbol or address')
+    .requiredOption('--amount <amount>', 'Amount to borrow (human-readable)')
+    .requiredOption('--owner <alias>', 'Account alias')
+    .option('--chain <id>', 'Chain ID or alias')
+    .option('--rate-mode <1|2>', 'Interest rate mode: 1=stable, 2=variable (default: 2)')
+    .action(async (opts, cmd) => {
+      const parentOpts = cmd.parent?.parent?.opts() ?? {}
+      const result = await handleAaveBorrow({
+        asset: opts.asset,
+        amount: opts.amount,
+        ownerAlias: opts.owner,
+        chain: opts.chain,
+        interestRateMode: opts.rateMode as '1' | '2' | undefined,
+      })
+      printResult(
+        result,
+        (data) => {
+          success('Aave V3 borrow completed')
+          label('Tx Hash', formatHash(data.txHash))
+        },
+        parentOpts
+      )
+      if (!result.ok) process.exit(exitCodeFor(result.error.code))
+    })
+
+  aaveCmd
+    .command('repay')
+    .description('Repay borrowed assets to Aave V3')
+    .requiredOption('--asset <token>', 'Token symbol or address')
+    .requiredOption('--amount <amount>', 'Amount to repay (human-readable)')
+    .requiredOption('--owner <alias>', 'Account alias')
+    .option('--chain <id>', 'Chain ID or alias')
+    .option('--rate-mode <1|2>', 'Interest rate mode: 1=stable, 2=variable (default: 2)')
+    .action(async (opts, cmd) => {
+      const parentOpts = cmd.parent?.parent?.opts() ?? {}
+      const result = await handleAaveRepay({
+        asset: opts.asset,
+        amount: opts.amount,
+        ownerAlias: opts.owner,
+        chain: opts.chain,
+        interestRateMode: opts.rateMode as '1' | '2' | undefined,
+      })
+      printResult(
+        result,
+        (data) => {
+          success('Aave V3 repay completed')
+          label('Approve Tx', formatHash(data.approveTxHash))
+          label('Repay Tx', formatHash(data.repayTxHash))
         },
         parentOpts
       )

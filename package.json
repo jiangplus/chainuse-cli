@@ -13,6 +13,10 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
+    "@0xsquid/sdk": "^2.13.0",
+    "@0xsquid/squid-types": "^0.1.226",
+    "@aave/contract-helpers": "^0.7",
+    "@aave/math-utils": "^0.7",
     "@mysten/sui": "^2.16.0",
     "@noble/hashes": "^1.5.0",
     "@safe-global/api-kit": "^4.1.0",
@@ -21,6 +25,9 @@
     "@scure/bip39": "^1.3.0",
     "@solana/spl-token": "^0.4.14",
     "@solana/web3.js": "^1.98.4",
+    "@uniswap/sdk-core": "^6.0",
+    "@uniswap/universal-router-sdk": "^5.1",
+    "@uniswap/v4-sdk": "^2.0",
     "@walletconnect/sign-client": "^2.17",
     "@walletconnect/types": "^2.17",
     "better-sqlite3": "^11.3.0",
