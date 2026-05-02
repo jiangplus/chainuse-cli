@@ -8,20 +8,33 @@ import {
   type Hex,
   type Address,
   type AbiFunction,
+  type Chain,
 } from 'viem'
+import {
+  mainnet, base, arbitrum, optimism, polygon, sepolia, baseSepolia,
+  zkSync, linea, scroll, avalanche, bsc, gnosis,
+} from 'viem/chains'
 import { chainIdToNumber } from './utils.js'
+
+const VIEM_CHAINS: Record<number, Chain> = {
+  1: mainnet, 8453: base, 42161: arbitrum, 10: optimism,
+  137: polygon, 11155111: sepolia, 84532: baseSepolia,
+  324: zkSync, 59144: linea, 534352: scroll,
+  43114: avalanche, 56: bsc, 100: gnosis,
+}
 
 export function buildPublicClient(rpcUrl: string, chainId: string): PublicClient {
   const id = chainIdToNumber(chainId)
-  return createPublicClient({
-    chain: {
-      id,
-      name: chainId,
-      nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
-      rpcUrls: { default: { http: [rpcUrl] } },
-    },
-    transport: http(rpcUrl),
-  })
+  const knownChain = VIEM_CHAINS[id]
+  const chain: Chain = knownChain
+    ? { ...knownChain, rpcUrls: { default: { http: [rpcUrl] }, public: { http: [rpcUrl] } } }
+    : {
+        id,
+        name: chainId,
+        nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
+        rpcUrls: { default: { http: [rpcUrl] } },
+      }
+  return createPublicClient({ chain, transport: http(rpcUrl) })
 }
 
 export async function estimateGas(

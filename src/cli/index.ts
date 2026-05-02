@@ -17,6 +17,34 @@ import {
 import { handleCall, handleStorageGet } from '../handlers/call.js'
 import { handlePolicyShow } from '../handlers/policy.js'
 import {
+  handleErc20Info,
+  handleErc20Balance,
+  handleErc20Allowance,
+  handleErc20Transfer,
+  handleErc20Approve,
+  handleErc721Info,
+  handleErc721Owner,
+  handleErc721TokenURI,
+  handleErc721Balance,
+  handleErc721Transfer,
+  handleErc1155Balance,
+  handleErc1155URI,
+  handleErc1155Transfer,
+  handleErc1155BatchTransfer,
+} from '../handlers/tokens.js'
+import {
+  handleEnsResolve,
+  handleEnsReverse,
+  handleEnsSetPrimary,
+  handleEnsSetRecord,
+} from '../handlers/ens.js'
+import { handlePrice, handlePriceFeeds } from '../handlers/price.js'
+import {
+  handleDeploy,
+  handleDeploymentsList,
+  handleDeploymentShow,
+} from '../handlers/deploy.js'
+import {
   printResult,
   success,
   info,
@@ -421,6 +449,630 @@ export function buildCLI(): Command {
           label('Max gas (USD)', `$${data.defaults.max_gas_usd.toFixed(2)}`)
           label('Max value/tx (USD)', `$${data.defaults.max_value_per_tx_usd.toFixed(2)}`)
           console.log()
+        },
+        parentOpts
+      )
+      if (!result.ok) process.exit(exitCodeFor(result.error.code))
+    })
+
+  // ─── chain erc20 ─────────────────────────────────────────────────────────────
+  const erc20Cmd = program.command('erc20').description('ERC-20 token operations')
+
+  erc20Cmd
+    .command('info')
+    .description('Get ERC-20 token metadata')
+    .requiredOption('--token <addr>', 'Token contract address')
+    .option('--chain <id>', 'Chain ID or alias')
+    .action(async (opts, cmd) => {
+      const parentOpts = cmd.parent?.parent?.opts() ?? {}
+      const result = await handleErc20Info({ token: opts.token, chain: opts.chain })
+      printResult(
+        result,
+        (data) => {
+          label('Name', data.name)
+          label('Symbol', data.symbol)
+          label('Decimals', data.decimals.toString())
+          label('Total Supply', data.totalSupply.toString())
+        },
+        parentOpts
+      )
+      if (!result.ok) process.exit(exitCodeFor(result.error.code))
+    })
+
+  erc20Cmd
+    .command('balance')
+    .description('Get ERC-20 token balance')
+    .requiredOption('--token <addr>', 'Token contract address')
+    .requiredOption('--address <addr>', 'Account address to check')
+    .option('--chain <id>', 'Chain ID or alias')
+    .action(async (opts, cmd) => {
+      const parentOpts = cmd.parent?.parent?.opts() ?? {}
+      const result = await handleErc20Balance({ token: opts.token, address: opts.address, chain: opts.chain })
+      printResult(
+        result,
+        (data) => {
+          label('Address', formatAddress(data.address))
+          label('Token', formatAddress(data.token))
+          label('Balance', `${chalk.bold(data.formatted)} ${data.symbol}`)
+          label('Decimals', data.decimals.toString())
+        },
+        parentOpts
+      )
+      if (!result.ok) process.exit(exitCodeFor(result.error.code))
+    })
+
+  erc20Cmd
+    .command('allowance')
+    .description('Get ERC-20 allowance')
+    .requiredOption('--token <addr>', 'Token contract address')
+    .requiredOption('--owner <addr>', 'Token owner address')
+    .requiredOption('--spender <addr>', 'Approved spender address')
+    .option('--chain <id>', 'Chain ID or alias')
+    .action(async (opts, cmd) => {
+      const parentOpts = cmd.parent?.parent?.opts() ?? {}
+      const result = await handleErc20Allowance({
+        token: opts.token,
+        owner: opts.owner,
+        spender: opts.spender,
+        chain: opts.chain,
+      })
+      printResult(
+        result,
+        (data) => {
+          label('Token', formatAddress(data.token))
+          label('Owner', formatAddress(data.owner))
+          label('Spender', formatAddress(data.spender))
+          label('Allowance', chalk.bold(data.formatted))
+        },
+        parentOpts
+      )
+      if (!result.ok) process.exit(exitCodeFor(result.error.code))
+    })
+
+  erc20Cmd
+    .command('transfer')
+    .description('Transfer ERC-20 tokens (prepares tx)')
+    .requiredOption('--token <addr>', 'Token contract address')
+    .requiredOption('--to <addr>', 'Recipient address')
+    .requiredOption('--amount <value>', 'Amount in token units')
+    .option('--account <alias>', 'Sender account alias')
+    .option('--chain <id>', 'Chain ID or alias')
+    .action(async (opts, cmd) => {
+      const parentOpts = cmd.parent?.parent?.opts() ?? {}
+      const result = await handleErc20Transfer({
+        token: opts.token,
+        to: opts.to,
+        amount: opts.amount,
+        account: opts.account,
+        chain: opts.chain,
+      })
+      printResult(
+        result,
+        (data) => {
+          success('ERC-20 transfer prepared')
+          label('ID', data.id)
+          label('From', formatAddress(data.from))
+          label('Token', formatAddress(data.to))
+          info(`Sign with: chain tx sign --tx-id ${data.id}`)
+        },
+        parentOpts
+      )
+      if (!result.ok) process.exit(exitCodeFor(result.error.code))
+    })
+
+  erc20Cmd
+    .command('approve')
+    .description('Approve ERC-20 spender (prepares tx)')
+    .requiredOption('--token <addr>', 'Token contract address')
+    .requiredOption('--spender <addr>', 'Address to approve')
+    .requiredOption('--amount <value>', 'Amount to approve (or "max")')
+    .option('--account <alias>', 'Owner account alias')
+    .option('--chain <id>', 'Chain ID or alias')
+    .action(async (opts, cmd) => {
+      const parentOpts = cmd.parent?.parent?.opts() ?? {}
+      const result = await handleErc20Approve({
+        token: opts.token,
+        spender: opts.spender,
+        amount: opts.amount,
+        account: opts.account,
+        chain: opts.chain,
+      })
+      printResult(
+        result,
+        (data) => {
+          success('ERC-20 approve prepared')
+          label('ID', data.id)
+          label('From', formatAddress(data.from))
+          label('Token', formatAddress(data.to))
+          info(`Sign with: chain tx sign --tx-id ${data.id}`)
+        },
+        parentOpts
+      )
+      if (!result.ok) process.exit(exitCodeFor(result.error.code))
+    })
+
+  // ─── chain erc721 ─────────────────────────────────────────────────────────────
+  const erc721Cmd = program.command('erc721').description('ERC-721 NFT operations')
+
+  erc721Cmd
+    .command('info')
+    .description('Get ERC-721 collection metadata')
+    .requiredOption('--token <addr>', 'Token contract address')
+    .option('--chain <id>', 'Chain ID or alias')
+    .action(async (opts, cmd) => {
+      const parentOpts = cmd.parent?.parent?.opts() ?? {}
+      const result = await handleErc721Info({ token: opts.token, chain: opts.chain })
+      printResult(
+        result,
+        (data) => {
+          label('Name', data.name)
+          label('Symbol', data.symbol)
+        },
+        parentOpts
+      )
+      if (!result.ok) process.exit(exitCodeFor(result.error.code))
+    })
+
+  erc721Cmd
+    .command('owner')
+    .description('Get ERC-721 token owner')
+    .requiredOption('--token <addr>', 'Token contract address')
+    .requiredOption('--token-id <n>', 'Token ID')
+    .option('--chain <id>', 'Chain ID or alias')
+    .action(async (opts, cmd) => {
+      const parentOpts = cmd.parent?.parent?.opts() ?? {}
+      const result = await handleErc721Owner({
+        token: opts.token,
+        tokenId: opts.tokenId,
+        chain: opts.chain,
+      })
+      printResult(
+        result,
+        (data) => {
+          label('Token', formatAddress(data.token))
+          label('Token ID', data.tokenId)
+          label('Owner', formatAddress(data.owner))
+        },
+        parentOpts
+      )
+      if (!result.ok) process.exit(exitCodeFor(result.error.code))
+    })
+
+  erc721Cmd
+    .command('token-uri')
+    .description('Get ERC-721 token URI')
+    .requiredOption('--token <addr>', 'Token contract address')
+    .requiredOption('--token-id <n>', 'Token ID')
+    .option('--chain <id>', 'Chain ID or alias')
+    .action(async (opts, cmd) => {
+      const parentOpts = cmd.parent?.parent?.opts() ?? {}
+      const result = await handleErc721TokenURI({
+        token: opts.token,
+        tokenId: opts.tokenId,
+        chain: opts.chain,
+      })
+      printResult(
+        result,
+        (data) => {
+          label('Token', formatAddress(data.token))
+          label('Token ID', data.tokenId)
+          label('URI', data.uri)
+        },
+        parentOpts
+      )
+      if (!result.ok) process.exit(exitCodeFor(result.error.code))
+    })
+
+  erc721Cmd
+    .command('balance')
+    .description('Get ERC-721 token count for an address')
+    .requiredOption('--token <addr>', 'Token contract address')
+    .requiredOption('--address <addr>', 'Account address to check')
+    .option('--chain <id>', 'Chain ID or alias')
+    .action(async (opts, cmd) => {
+      const parentOpts = cmd.parent?.parent?.opts() ?? {}
+      const result = await handleErc721Balance({
+        token: opts.token,
+        address: opts.address,
+        chain: opts.chain,
+      })
+      printResult(
+        result,
+        (data) => {
+          label('Token', formatAddress(data.token))
+          label('Address', formatAddress(data.address))
+          label('Balance', data.balance.toString())
+        },
+        parentOpts
+      )
+      if (!result.ok) process.exit(exitCodeFor(result.error.code))
+    })
+
+  erc721Cmd
+    .command('transfer')
+    .description('Transfer ERC-721 token (prepares tx)')
+    .requiredOption('--token <addr>', 'Token contract address')
+    .requiredOption('--to <addr>', 'Recipient address')
+    .requiredOption('--token-id <n>', 'Token ID')
+    .option('--account <alias>', 'Sender account alias')
+    .option('--chain <id>', 'Chain ID or alias')
+    .action(async (opts, cmd) => {
+      const parentOpts = cmd.parent?.parent?.opts() ?? {}
+      const result = await handleErc721Transfer({
+        token: opts.token,
+        to: opts.to,
+        tokenId: opts.tokenId,
+        account: opts.account,
+        chain: opts.chain,
+      })
+      printResult(
+        result,
+        (data) => {
+          success('ERC-721 transfer prepared')
+          label('ID', data.id)
+          label('From', formatAddress(data.from))
+          label('Token', formatAddress(data.to))
+          info(`Sign with: chain tx sign --tx-id ${data.id}`)
+        },
+        parentOpts
+      )
+      if (!result.ok) process.exit(exitCodeFor(result.error.code))
+    })
+
+  // ─── chain erc1155 ────────────────────────────────────────────────────────────
+  const erc1155Cmd = program.command('erc1155').description('ERC-1155 multi-token operations')
+
+  erc1155Cmd
+    .command('balance')
+    .description('Get ERC-1155 token balance')
+    .requiredOption('--token <addr>', 'Token contract address')
+    .requiredOption('--id <n>', 'Token ID')
+    .requiredOption('--address <addr>', 'Account address to check')
+    .option('--chain <id>', 'Chain ID or alias')
+    .action(async (opts, cmd) => {
+      const parentOpts = cmd.parent?.parent?.opts() ?? {}
+      const result = await handleErc1155Balance({
+        token: opts.token,
+        id: opts.id,
+        address: opts.address,
+        chain: opts.chain,
+      })
+      printResult(
+        result,
+        (data) => {
+          label('Token', formatAddress(data.token))
+          label('ID', data.id)
+          label('Address', formatAddress(data.address))
+          label('Balance', data.balance.toString())
+        },
+        parentOpts
+      )
+      if (!result.ok) process.exit(exitCodeFor(result.error.code))
+    })
+
+  erc1155Cmd
+    .command('uri')
+    .description('Get ERC-1155 token URI')
+    .requiredOption('--token <addr>', 'Token contract address')
+    .requiredOption('--id <n>', 'Token ID')
+    .option('--chain <id>', 'Chain ID or alias')
+    .action(async (opts, cmd) => {
+      const parentOpts = cmd.parent?.parent?.opts() ?? {}
+      const result = await handleErc1155URI({
+        token: opts.token,
+        id: opts.id,
+        chain: opts.chain,
+      })
+      printResult(
+        result,
+        (data) => {
+          label('Token', formatAddress(data.token))
+          label('ID', data.id)
+          label('URI', data.uri)
+        },
+        parentOpts
+      )
+      if (!result.ok) process.exit(exitCodeFor(result.error.code))
+    })
+
+  erc1155Cmd
+    .command('transfer')
+    .description('Transfer ERC-1155 tokens (prepares tx)')
+    .requiredOption('--token <addr>', 'Token contract address')
+    .requiredOption('--to <addr>', 'Recipient address')
+    .requiredOption('--id <n>', 'Token ID')
+    .requiredOption('--amount <n>', 'Amount to transfer')
+    .option('--account <alias>', 'Sender account alias')
+    .option('--chain <id>', 'Chain ID or alias')
+    .action(async (opts, cmd) => {
+      const parentOpts = cmd.parent?.parent?.opts() ?? {}
+      const result = await handleErc1155Transfer({
+        token: opts.token,
+        to: opts.to,
+        id: opts.id,
+        amount: opts.amount,
+        account: opts.account,
+        chain: opts.chain,
+      })
+      printResult(
+        result,
+        (data) => {
+          success('ERC-1155 transfer prepared')
+          label('ID', data.id)
+          label('From', formatAddress(data.from))
+          label('Token', formatAddress(data.to))
+          info(`Sign with: chain tx sign --tx-id ${data.id}`)
+        },
+        parentOpts
+      )
+      if (!result.ok) process.exit(exitCodeFor(result.error.code))
+    })
+
+  erc1155Cmd
+    .command('batch-transfer')
+    .description('Batch transfer ERC-1155 tokens (prepares tx)')
+    .requiredOption('--token <addr>', 'Token contract address')
+    .requiredOption('--to <addr>', 'Recipient address')
+    .requiredOption('--ids <n,n,...>', 'Comma-separated token IDs')
+    .requiredOption('--amounts <n,n,...>', 'Comma-separated amounts')
+    .option('--account <alias>', 'Sender account alias')
+    .option('--chain <id>', 'Chain ID or alias')
+    .action(async (opts, cmd) => {
+      const parentOpts = cmd.parent?.parent?.opts() ?? {}
+      const ids = (opts.ids as string).split(',').map((s: string) => s.trim())
+      const amounts = (opts.amounts as string).split(',').map((s: string) => s.trim())
+      const result = await handleErc1155BatchTransfer({
+        token: opts.token,
+        to: opts.to,
+        ids,
+        amounts,
+        account: opts.account,
+        chain: opts.chain,
+      })
+      printResult(
+        result,
+        (data) => {
+          success('ERC-1155 batch transfer prepared')
+          label('ID', data.id)
+          label('From', formatAddress(data.from))
+          label('Token', formatAddress(data.to))
+          info(`Sign with: chain tx sign --tx-id ${data.id}`)
+        },
+        parentOpts
+      )
+      if (!result.ok) process.exit(exitCodeFor(result.error.code))
+    })
+
+  // ─── chain ens ───────────────────────────────────────────────────────────────
+  const ensCmd = program.command('ens').description('ENS name resolution and management')
+
+  ensCmd
+    .command('resolve')
+    .description('Resolve ENS name to address')
+    .argument('<name>', 'ENS name (e.g. vitalik.eth)')
+    .option('--chain <id>', 'Chain ID or alias (mainnet only)')
+    .action(async (name, opts, cmd) => {
+      const parentOpts = cmd.parent?.parent?.opts() ?? {}
+      const result = await handleEnsResolve({ name, chain: opts.chain })
+      printResult(
+        result,
+        (data) => {
+          label('Name', data.name)
+          label('Normalized', data.normalizedName)
+          label('Address', data.address ? formatAddress(data.address) : chalk.dim('not found'))
+        },
+        parentOpts
+      )
+      if (!result.ok) process.exit(exitCodeFor(result.error.code))
+    })
+
+  ensCmd
+    .command('reverse')
+    .description('Reverse resolve address to ENS name')
+    .argument('<address>', 'Ethereum address')
+    .option('--chain <id>', 'Chain ID or alias (mainnet only)')
+    .action(async (address, opts, cmd) => {
+      const parentOpts = cmd.parent?.parent?.opts() ?? {}
+      const result = await handleEnsReverse({ address, chain: opts.chain })
+      printResult(
+        result,
+        (data) => {
+          label('Address', formatAddress(data.address))
+          label('Name', data.name ?? chalk.dim('no reverse record'))
+        },
+        parentOpts
+      )
+      if (!result.ok) process.exit(exitCodeFor(result.error.code))
+    })
+
+  ensCmd
+    .command('set-primary')
+    .description('Set primary ENS name for account (prepares tx)')
+    .argument('<name>', 'ENS name to set as primary')
+    .requiredOption('--account <alias>', 'Account alias')
+    .option('--chain <id>', 'Chain ID or alias (mainnet only)')
+    .action(async (name, opts, cmd) => {
+      const parentOpts = cmd.parent?.parent?.opts() ?? {}
+      const result = await handleEnsSetPrimary({ name, account: opts.account, chain: opts.chain })
+      printResult(
+        result,
+        (data) => {
+          success('ENS set-primary prepared')
+          label('ID', data.id)
+          label('From', formatAddress(data.from))
+          info(`Sign with: chain tx sign --tx-id ${data.id}`)
+        },
+        parentOpts
+      )
+      if (!result.ok) process.exit(exitCodeFor(result.error.code))
+    })
+
+  ensCmd
+    .command('set-record')
+    .description('Set ENS text record (prepares tx)')
+    .argument('<name>', 'ENS name')
+    .argument('<key>', 'Record key (e.g. "url", "email")')
+    .argument('<value>', 'Record value')
+    .requiredOption('--account <alias>', 'Account alias')
+    .option('--chain <id>', 'Chain ID or alias (mainnet only)')
+    .action(async (name, key, value, opts, cmd) => {
+      const parentOpts = cmd.parent?.parent?.opts() ?? {}
+      const result = await handleEnsSetRecord({ name, key, value, account: opts.account, chain: opts.chain })
+      printResult(
+        result,
+        (data) => {
+          success('ENS set-record prepared')
+          label('ID', data.id)
+          label('From', formatAddress(data.from))
+          info(`Sign with: chain tx sign --tx-id ${data.id}`)
+        },
+        parentOpts
+      )
+      if (!result.ok) process.exit(exitCodeFor(result.error.code))
+    })
+
+  // ─── chain price ──────────────────────────────────────────────────────────────
+  const priceCmd = program.command('price').description('Chainlink price feed queries')
+
+  priceCmd
+    .command('feeds')
+    .description('List available Chainlink price feeds for a chain')
+    .option('--chain <id>', 'Chain ID or alias')
+    .action(async (opts, cmd) => {
+      const parentOpts = cmd.parent?.parent?.opts() ?? {}
+      const result = await handlePriceFeeds({ chain: opts.chain })
+      printResult(
+        result,
+        (data) => {
+          if (data.length === 0) {
+            info('No registered feeds for this chain. Use a raw 0x address.')
+            return
+          }
+          console.log(chalk.bold(`\n${'PAIR'.padEnd(16)} ${'FEED ADDRESS'.padEnd(44)} CHAIN`))
+          console.log('─'.repeat(80))
+          for (const f of data) {
+            console.log(`${chalk.cyan(f.pair.padEnd(16))} ${f.feed.padEnd(44)} ${f.chain}`)
+          }
+          console.log()
+        },
+        parentOpts
+      )
+      if (!result.ok) process.exit(exitCodeFor(result.error.code))
+    })
+
+  // `chain price <feed>` — positional argument
+  priceCmd
+    .argument('<feed>', 'Price pair (ETH/USD) or feed address (0x...)')
+    .option('--chain <id>', 'Chain ID or alias')
+    .action(async (feed, opts, cmd) => {
+      const parentOpts = cmd.parent?.parent?.opts() ?? {}
+      const result = await handlePrice({ feed, chain: opts.chain })
+      printResult(
+        result,
+        (data) => {
+          label('Pair', data.description)
+          label('Price', chalk.bold(data.price))
+          label('Decimals', data.decimals.toString())
+          label('Updated at', new Date(data.updatedAt * 1000).toISOString())
+          label('Chain', data.chain)
+        },
+        parentOpts
+      )
+      if (!result.ok) process.exit(exitCodeFor(result.error.code))
+    })
+
+  // ─── chain deploy ─────────────────────────────────────────────────────────────
+  program
+    .command('deploy')
+    .description('Deploy a smart contract (prepares tx)')
+    .option('--bytecode <file>', 'Path to bytecode file (.bin or .hex)')
+    .option('--abi <file>', 'Path to ABI JSON file')
+    .option('--artifact <file>', 'Path to Hardhat/Foundry artifact JSON')
+    .option('--args <v,v,...>', 'Comma-separated constructor arguments')
+    .option('--salt <0x...>', 'Salt for CREATE2 deterministic deployment')
+    .requiredOption('--account <alias>', 'Deployer account alias')
+    .option('--chain <id>', 'Chain ID or alias')
+    .action(async (opts, cmd) => {
+      const parentOpts = cmd.parent?.opts() ?? {}
+      const args = opts.args
+        ? (opts.args as string).split(',').map((s: string) => s.trim())
+        : undefined
+      const result = await handleDeploy({
+        bytecodeFile: opts.bytecode,
+        abiFile: opts.abi,
+        artifactFile: opts.artifact,
+        args,
+        salt: opts.salt,
+        account: opts.account,
+        chain: opts.chain,
+      })
+      printResult(
+        result,
+        (data) => {
+          success('Deploy transaction prepared')
+          label('ID', data.id)
+          label('From', formatAddress(data.from))
+          if (data.contractAddress) {
+            label('Contract Address', formatAddress(data.contractAddress))
+            info('(CREATE2 — address is deterministic)')
+          }
+          label('Gas estimate', data.gasEstimate?.toString() ?? 'n/a')
+          info(`Sign with: chain tx sign --tx-id ${data.id}`)
+        },
+        parentOpts
+      )
+      if (!result.ok) process.exit(exitCodeFor(result.error.code))
+    })
+
+  // ─── chain deployments ────────────────────────────────────────────────────────
+  const deploymentsCmd = program.command('deployments').description('Manage deployment registry')
+
+  deploymentsCmd
+    .command('list')
+    .description('List recorded deployments')
+    .option('--chain <id>', 'Filter by chain ID or alias')
+    .action(async (opts, cmd) => {
+      const parentOpts = cmd.parent?.parent?.opts() ?? {}
+      const result = await handleDeploymentsList({ chain: opts.chain })
+      printResult(
+        result,
+        (data) => {
+          if (data.length === 0) {
+            info('No deployments recorded yet.')
+            return
+          }
+          console.log(chalk.bold(`\n${'ADDRESS'.padEnd(44)} ${'CHAIN'.padEnd(16)} DEPLOYER`))
+          console.log('─'.repeat(100))
+          for (const d of data) {
+            console.log(
+              `${chalk.cyan(d.address.padEnd(44))} ${d.chainId.padEnd(16)} ${d.deployer ?? chalk.dim('unknown')}`
+            )
+          }
+          console.log()
+        },
+        parentOpts
+      )
+      if (!result.ok) process.exit(exitCodeFor(result.error.code))
+    })
+
+  deploymentsCmd
+    .command('show')
+    .description('Show deployment details')
+    .requiredOption('--address <0x...>', 'Contract address')
+    .option('--chain <id>', 'Chain ID or alias')
+    .action(async (opts, cmd) => {
+      const parentOpts = cmd.parent?.parent?.opts() ?? {}
+      const result = await handleDeploymentShow({ address: opts.address, chain: opts.chain })
+      printResult(
+        result,
+        (data) => {
+          label('Address', formatAddress(data.address))
+          label('Chain', data.chainId)
+          if (data.txHash) label('Tx Hash', formatHash(data.txHash))
+          if (data.salt) label('Salt', data.salt)
+          if (data.deployer) label('Deployer', formatAddress(data.deployer))
+          if (data.bytecodeHash) label('Bytecode hash', data.bytecodeHash)
+          if (data.createdAt) label('Created at', new Date(data.createdAt).toISOString())
         },
         parentOpts
       )

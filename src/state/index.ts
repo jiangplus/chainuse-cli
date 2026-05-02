@@ -1,6 +1,19 @@
 import { openStateDb } from './db.js'
 import type { Account, TxEnvelope } from '../core/types.js'
 
+// ─── Deployment type ──────────────────────────────────────────────────────────
+
+export type Deployment = {
+  address: string
+  chainId: string
+  txHash?: string
+  abi?: string
+  bytecodeHash?: string
+  salt?: string
+  deployer?: string
+  createdAt?: number
+}
+
 // ─── Accounts ────────────────────────────────────────────────────────────────
 
 export function insertAccount(account: Account): void {
@@ -103,6 +116,48 @@ export function listTxs(): TxEnvelope[] {
   return rows.map(rowToEnvelope)
 }
 
+// ─── Deployments ─────────────────────────────────────────────────────────────
+
+export function insertDeployment(deployment: Deployment): void {
+  const db = openStateDb()
+  db.prepare(`
+    INSERT OR REPLACE INTO deployments (address, chain_id, tx_hash, abi, bytecode_hash, salt, deployer, created_at)
+    VALUES (@address, @chainId, @txHash, @abi, @bytecodeHash, @salt, @deployer, @createdAt)
+  `).run({
+    address: deployment.address,
+    chainId: deployment.chainId,
+    txHash: deployment.txHash ?? null,
+    abi: deployment.abi ?? null,
+    bytecodeHash: deployment.bytecodeHash ?? null,
+    salt: deployment.salt ?? null,
+    deployer: deployment.deployer ?? null,
+    createdAt: deployment.createdAt ?? Date.now(),
+  })
+}
+
+export function getDeployment(address: string, chainId: string): Deployment | null {
+  const db = openStateDb()
+  const row = db
+    .prepare('SELECT * FROM deployments WHERE LOWER(address) = LOWER(?) AND chain_id = ?')
+    .get(address, chainId) as DbDeployment | undefined
+  return row ? rowToDeployment(row) : null
+}
+
+export function listDeployments(chainId?: string): Deployment[] {
+  const db = openStateDb()
+  let rows: DbDeployment[]
+  if (chainId) {
+    rows = db
+      .prepare('SELECT * FROM deployments WHERE chain_id = ? ORDER BY created_at DESC')
+      .all(chainId) as DbDeployment[]
+  } else {
+    rows = db
+      .prepare('SELECT * FROM deployments ORDER BY created_at DESC')
+      .all() as DbDeployment[]
+  }
+  return rows.map(rowToDeployment)
+}
+
 // ─── Internal types ──────────────────────────────────────────────────────────
 
 type DbAccount = {
@@ -132,6 +187,30 @@ type DbTx = {
   simulation_result: string | null
   created_at: number
   updated_at: number
+}
+
+type DbDeployment = {
+  address: string
+  chain_id: string
+  tx_hash: string | null
+  abi: string | null
+  bytecode_hash: string | null
+  salt: string | null
+  deployer: string | null
+  created_at: number | null
+}
+
+function rowToDeployment(row: DbDeployment): Deployment {
+  return {
+    address: row.address,
+    chainId: row.chain_id,
+    txHash: row.tx_hash ?? undefined,
+    abi: row.abi ?? undefined,
+    bytecodeHash: row.bytecode_hash ?? undefined,
+    salt: row.salt ?? undefined,
+    deployer: row.deployer ?? undefined,
+    createdAt: row.created_at ?? undefined,
+  }
 }
 
 function rowToAccount(row: DbAccount): Account {

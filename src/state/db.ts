@@ -53,5 +53,17 @@ function migrate(db: Database.Database): void {
       updated_at INTEGER NOT NULL,
       PRIMARY KEY (address, chain_id)
     );
+
+    CREATE TABLE IF NOT EXISTS deployments (
+      address TEXT NOT NULL,
+      chain_id TEXT NOT NULL,
+      tx_hash TEXT,
+      abi TEXT,
+      bytecode_hash TEXT,
+      salt TEXT,
+      deployer TEXT,
+      created_at INTEGER,
+      PRIMARY KEY (address, chain_id)
+    );
   `)
 }
