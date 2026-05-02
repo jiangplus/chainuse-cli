@@ -45,6 +45,21 @@ import {
   handleDeploymentShow,
 } from '../handlers/deploy.js'
 import {
+  handleAccountCreate4337,
+  handleAccountCreate7702,
+  handleAccountList,
+  handleAccountInfo,
+  handleAccountSend,
+} from '../handlers/account.js'
+import {
+  handleSafeCreate,
+  handleSafeInfo,
+  handleSafePropose,
+  handleSafeConfirm,
+  handleSafeExecute,
+  handleSafeQueue,
+} from '../handlers/safe.js'
+import {
   printResult,
   success,
   info,
@@ -360,7 +375,7 @@ export function buildCLI(): Command {
   txCmd
     .command('status')
     .description('Check transaction status by hash')
-    .requiredOption('--hash <0x...>', 'Transaction hash')
+    .requiredOption('--hash <address>', 'Transaction hash')
     .option('--chain <id>', 'Chain ID or alias')
     .action(async (opts, cmd) => {
       const parentOpts = cmd.parent?.parent?.opts() ?? {}
@@ -995,7 +1010,7 @@ export function buildCLI(): Command {
     .option('--abi <file>', 'Path to ABI JSON file')
     .option('--artifact <file>', 'Path to Hardhat/Foundry artifact JSON')
     .option('--args <v,v,...>', 'Comma-separated constructor arguments')
-    .option('--salt <0x...>', 'Salt for CREATE2 deterministic deployment')
+    .option('--salt <address>', 'Salt for CREATE2 deterministic deployment')
     .requiredOption('--account <alias>', 'Deployer account alias')
     .option('--chain <id>', 'Chain ID or alias')
     .action(async (opts, cmd) => {
@@ -1064,7 +1079,7 @@ export function buildCLI(): Command {
   deploymentsCmd
     .command('show')
     .description('Show deployment details')
-    .requiredOption('--address <0x...>', 'Contract address')
+    .requiredOption('--address <address>', 'Contract address')
     .option('--chain <id>', 'Chain ID or alias')
     .action(async (opts, cmd) => {
       const parentOpts = cmd.parent?.parent?.opts() ?? {}
@@ -1079,6 +1094,324 @@ export function buildCLI(): Command {
           if (data.deployer) label('Deployer', formatAddress(data.deployer))
           if (data.bytecodeHash) label('Bytecode hash', data.bytecodeHash)
           if (data.createdAt) label('Created at', new Date(data.createdAt).toISOString())
+        },
+        parentOpts
+      )
+      if (!result.ok) process.exit(exitCodeFor(result.error.code))
+    })
+
+  // ─── chain account ───────────────────────────────────────────────────────────
+  const accountCmd = program.command('account').description('Manage smart accounts (ERC-4337, ERC-7702)')
+
+  const accountCreateCmd = accountCmd.command('create').description('Create a new smart account')
+
+  accountCreateCmd
+    .requiredOption('--type <type>', 'Account type: 4337 or 7702')
+    .requiredOption('--owner <alias>', 'EOA owner alias')
+    .option('--factory <factory>', 'For 4337: factory type simple|safe (default: simple)')
+    .option('--delegate <address>', 'For 7702: implementation contract address')
+    .option('--alias <name>', 'Human-readable alias for the smart account')
+    .option('--paymaster-policy <id>', 'Alchemy Gas Manager policy ID (for 4337)')
+    .option('--chain <id>', 'Chain ID or alias')
+    .action(async (opts, cmd) => {
+      const parentOpts = cmd.parent?.parent?.opts() ?? {}
+      if (opts.type === '4337') {
+        const result = await handleAccountCreate4337({
+          ownerAlias: opts.owner,
+          factory: opts.factory ?? 'simple',
+          alias: opts.alias,
+          paymasterPolicy: opts.paymasterPolicy,
+          chain: opts.chain,
+        })
+        printResult(
+          result,
+          (data) => {
+            success(`ERC-4337 smart account created: ${data.alias}`)
+            label('Alias', data.alias)
+            label('Address', formatAddress(data.address))
+            label('Type', data.type)
+            label('Owner', data.owner)
+            label('Factory', data.factory)
+          },
+          parentOpts
+        )
+        if (!result.ok) process.exit(exitCodeFor(result.error.code))
+      } else if (opts.type === '7702') {
+        if (!opts.delegate) {
+          console.error(chalk.red('--delegate is required for --type 7702'))
+          process.exit(1)
+        }
+        const result = await handleAccountCreate7702({
+          ownerAlias: opts.owner,
+          delegateAddress: opts.delegate,
+          alias: opts.alias,
+          chain: opts.chain,
+        })
+        printResult(
+          result,
+          (data) => {
+            success(`ERC-7702 delegated account created: ${data.alias}`)
+            label('Alias', data.alias)
+            label('Address', formatAddress(data.address))
+            label('Type', data.type)
+            label('Owner', data.owner)
+            label('Delegate', formatAddress(data.delegate))
+          },
+          parentOpts
+        )
+        if (!result.ok) process.exit(exitCodeFor(result.error.code))
+      } else {
+        console.error(chalk.red(`Unknown account type: ${opts.type}. Use 4337 or 7702`))
+        process.exit(1)
+      }
+    })
+
+  accountCmd
+    .command('list')
+    .description('List all smart accounts')
+    .option('--chain <id>', 'Filter by chain ID or alias')
+    .action(async (opts, cmd) => {
+      const parentOpts = cmd.parent?.parent?.opts() ?? {}
+      const result = await handleAccountList({ chain: opts.chain })
+      printResult(
+        result,
+        (data) => {
+          if (data.length === 0) {
+            info('No smart accounts found. Run "chain account create" to create one.')
+            return
+          }
+          console.log(chalk.bold(`\n${'ALIAS'.padEnd(28)} ${'ADDRESS'.padEnd(44)} ${'TYPE'.padEnd(6)} ${'CHAIN'.padEnd(16)} OWNER`))
+          console.log('─'.repeat(115))
+          for (const acct of data) {
+            console.log(
+              `${chalk.cyan(acct.alias.padEnd(28))} ${acct.address.padEnd(44)} ${acct.type.padEnd(6)} ${acct.chainId.padEnd(16)} ${acct.ownerAlias}`
+            )
+          }
+          console.log()
+        },
+        parentOpts
+      )
+      if (!result.ok) process.exit(exitCodeFor(result.error.code))
+    })
+
+  accountCmd
+    .command('info')
+    .description('Show smart account details')
+    .requiredOption('--alias <name>', 'Smart account alias')
+    .action(async (opts, cmd) => {
+      const parentOpts = cmd.parent?.parent?.opts() ?? {}
+      const result = await handleAccountInfo({ alias: opts.alias })
+      printResult(
+        result,
+        (data) => {
+          label('Alias', data.alias)
+          label('Type', data.type)
+          label('Address', formatAddress(data.address))
+          label('Chain', data.chainId)
+          label('Owner', data.ownerAlias)
+          if (data.factory) label('Factory', data.factory)
+          if (data.delegate) label('Delegate', formatAddress(data.delegate))
+          if (data.paymasterPolicy) label('Paymaster policy', data.paymasterPolicy)
+          label('Created', formatTimestamp(data.createdAt))
+        },
+        parentOpts
+      )
+      if (!result.ok) process.exit(exitCodeFor(result.error.code))
+    })
+
+  accountCmd
+    .command('send')
+    .description('Send from a smart account (4337: UserOperation, 7702: delegated tx)')
+    .requiredOption('--account <alias>', 'Smart account alias')
+    .requiredOption('--to <addr>', 'Destination address')
+    .requiredOption('--amount <v>', 'Amount to send')
+    .requiredOption('--asset <asset>', 'Asset: "native" or "ERC20:0x..."')
+    .option('--chain <id>', 'Chain ID or alias')
+    .option('--paymaster-policy <id>', 'Alchemy Gas Manager policy ID')
+    .action(async (opts, cmd) => {
+      const parentOpts = cmd.parent?.parent?.opts() ?? {}
+      const result = await handleAccountSend({
+        alias: opts.account,
+        to: opts.to,
+        amount: opts.amount,
+        asset: opts.asset,
+        chain: opts.chain,
+        paymasterPolicy: opts.paymasterPolicy,
+      })
+      printResult(
+        result,
+        (data) => {
+          success('Send completed')
+          label('Hash', formatHash(data.hash))
+          label('Type', data.type)
+          if (data.userOpHash) label('UserOp hash', data.userOpHash)
+        },
+        parentOpts
+      )
+      if (!result.ok) process.exit(exitCodeFor(result.error.code))
+    })
+
+  // ─── chain safe ───────────────────────────────────────────────────────────────
+  const safeCmd = program.command('safe').description('Gnosis Safe multisig operations')
+
+  safeCmd
+    .command('create')
+    .description('Deploy a new Gnosis Safe')
+    .requiredOption('--owners <addr,addr,...>', 'Comma-separated owner addresses')
+    .requiredOption('--threshold <n>', 'Signature threshold', parseInt)
+    .requiredOption('--account <alias>', 'Deployer account alias')
+    .option('--salt <nonce>', 'Salt nonce for deterministic address')
+    .option('--chain <id>', 'Chain ID or alias')
+    .action(async (opts, cmd) => {
+      const parentOpts = cmd.parent?.parent?.opts() ?? {}
+      const owners = (opts.owners as string).split(',').map((s: string) => s.trim())
+      const result = await handleSafeCreate({
+        owners,
+        threshold: opts.threshold,
+        account: opts.account,
+        saltNonce: opts.salt,
+        chain: opts.chain,
+      })
+      printResult(
+        result,
+        (data) => {
+          success('Safe created/predicted')
+          label('Address', formatAddress(data.address))
+          label('Threshold', `${data.threshold}/${data.owners.length}`)
+          label('Owners', data.owners.join(', '))
+        },
+        parentOpts
+      )
+      if (!result.ok) process.exit(exitCodeFor(result.error.code))
+    })
+
+  safeCmd
+    .command('info')
+    .description('Show Safe information')
+    .requiredOption('--address <address>', 'Safe address')
+    .option('--chain <id>', 'Chain ID or alias')
+    .action(async (opts, cmd) => {
+      const parentOpts = cmd.parent?.parent?.opts() ?? {}
+      const result = await handleSafeInfo({ address: opts.address, chain: opts.chain })
+      printResult(
+        result,
+        (data) => {
+          label('Address', formatAddress(data.address))
+          label('Version', data.version)
+          label('Threshold', `${data.threshold}/${data.owners.length}`)
+          label('Owners', data.owners.join(', '))
+          label('Nonce', data.nonce.toString())
+          label('Balance', `${data.balance} wei`)
+        },
+        parentOpts
+      )
+      if (!result.ok) process.exit(exitCodeFor(result.error.code))
+    })
+
+  safeCmd
+    .command('propose')
+    .description('Propose and sign a Safe transaction')
+    .requiredOption('--address <address>', 'Safe address')
+    .requiredOption('--to <addr>', 'Transaction destination')
+    .option('--value <v>', 'ETH value in wei (default: 0)')
+    .option('--data <hex>', 'Calldata (default: 0x)')
+    .requiredOption('--account <alias>', 'Signer account alias')
+    .option('--chain <id>', 'Chain ID or alias')
+    .action(async (opts, cmd) => {
+      const parentOpts = cmd.parent?.parent?.opts() ?? {}
+      const result = await handleSafePropose({
+        safeAddress: opts.address,
+        to: opts.to,
+        value: opts.value,
+        data: opts.data,
+        account: opts.account,
+        chain: opts.chain,
+      })
+      printResult(
+        result,
+        (data) => {
+          success('Safe transaction proposed')
+          label('Safe TX Hash', formatHash(data.safeTxHash))
+          info(`Confirm with: chain safe confirm --tx-hash ${data.safeTxHash} --account <alias>`)
+        },
+        parentOpts
+      )
+      if (!result.ok) process.exit(exitCodeFor(result.error.code))
+    })
+
+  safeCmd
+    .command('confirm')
+    .description('Add a signature to a proposed Safe transaction')
+    .requiredOption('--tx-hash <safeTxHash>', 'Safe transaction hash')
+    .requiredOption('--account <alias>', 'Signer account alias')
+    .option('--chain <id>', 'Chain ID or alias')
+    .action(async (opts, cmd) => {
+      const parentOpts = cmd.parent?.parent?.opts() ?? {}
+      const result = await handleSafeConfirm({
+        safeTxHash: opts.txHash,
+        account: opts.account,
+        chain: opts.chain,
+      })
+      printResult(
+        result,
+        (data) => {
+          success('Signature added')
+          label('Safe TX Hash', formatHash(data.safeTxHash))
+          label('Signatures collected', data.signaturesCollected.toString())
+        },
+        parentOpts
+      )
+      if (!result.ok) process.exit(exitCodeFor(result.error.code))
+    })
+
+  safeCmd
+    .command('execute')
+    .description('Execute a Safe transaction (threshold must be met)')
+    .requiredOption('--tx-hash <safeTxHash>', 'Safe transaction hash')
+    .requiredOption('--account <alias>', 'Executor account alias')
+    .option('--chain <id>', 'Chain ID or alias')
+    .action(async (opts, cmd) => {
+      const parentOpts = cmd.parent?.parent?.opts() ?? {}
+      const result = await handleSafeExecute({
+        safeTxHash: opts.txHash,
+        account: opts.account,
+        chain: opts.chain,
+      })
+      printResult(
+        result,
+        (data) => {
+          success('Safe transaction executed!')
+          label('Tx Hash', formatHash(data.txHash))
+        },
+        parentOpts
+      )
+      if (!result.ok) process.exit(exitCodeFor(result.error.code))
+    })
+
+  safeCmd
+    .command('queue')
+    .description('List pending Safe transactions')
+    .requiredOption('--address <address>', 'Safe address')
+    .option('--chain <id>', 'Chain ID or alias')
+    .action(async (opts, cmd) => {
+      const parentOpts = cmd.parent?.parent?.opts() ?? {}
+      const result = await handleSafeQueue({ address: opts.address, chain: opts.chain })
+      printResult(
+        result,
+        (data) => {
+          if (data.length === 0) {
+            info('No pending Safe transactions.')
+            return
+          }
+          console.log(chalk.bold(`\n${'SAFE TX HASH'.padEnd(68)} ${'TO'.padEnd(44)} ${'VALUE'.padEnd(20)} SIGS`))
+          console.log('─'.repeat(145))
+          for (const tx of data) {
+            const sigs = `${tx.confirmations}/${tx.threshold}`
+            console.log(
+              `${chalk.magenta(tx.safeTxHash.padEnd(68))} ${tx.to.padEnd(44)} ${tx.value.padEnd(20)} ${sigs}`
+            )
+          }
+          console.log()
         },
         parentOpts
       )

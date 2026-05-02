@@ -65,5 +65,32 @@ function migrate(db: Database.Database): void {
       created_at INTEGER,
       PRIMARY KEY (address, chain_id)
     );
+
+    CREATE TABLE IF NOT EXISTS smart_accounts (
+      alias TEXT PRIMARY KEY,
+      type TEXT NOT NULL,
+      address TEXT NOT NULL,
+      chain_id TEXT NOT NULL,
+      owner_alias TEXT NOT NULL,
+      factory TEXT,
+      delegate TEXT,
+      paymaster_policy TEXT,
+      created_at INTEGER
+    );
+
+    CREATE TABLE IF NOT EXISTS safe_txs (
+      safe_tx_hash TEXT PRIMARY KEY,
+      safe_address TEXT NOT NULL,
+      chain_id TEXT NOT NULL,
+      to_address TEXT NOT NULL,
+      value TEXT NOT NULL,
+      data TEXT,
+      nonce INTEGER,
+      signatures TEXT,
+      status TEXT NOT NULL,
+      tx_hash TEXT,
+      created_at INTEGER,
+      updated_at INTEGER
+    );
   `)
 }

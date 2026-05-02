@@ -1,6 +1,209 @@
 import { openStateDb } from './db.js'
 import type { Account, TxEnvelope } from '../core/types.js'
 
+// ─── Smart Accounts ──────────────────────────────────────────────────────────
+
+export type StoredAccount = {
+  alias: string
+  type: '4337' | '7702'
+  address: string
+  chainId: string
+  ownerAlias: string
+  factory?: string
+  delegate?: string
+  paymasterPolicy?: string
+  createdAt: number
+}
+
+type DbSmartAccount = {
+  alias: string
+  type: string
+  address: string
+  chain_id: string
+  owner_alias: string
+  factory: string | null
+  delegate: string | null
+  paymaster_policy: string | null
+  created_at: number
+}
+
+function rowToSmartAccount(row: DbSmartAccount): StoredAccount {
+  return {
+    alias: row.alias,
+    type: row.type as '4337' | '7702',
+    address: row.address,
+    chainId: row.chain_id,
+    ownerAlias: row.owner_alias,
+    factory: row.factory ?? undefined,
+    delegate: row.delegate ?? undefined,
+    paymasterPolicy: row.paymaster_policy ?? undefined,
+    createdAt: row.created_at,
+  }
+}
+
+export function insertSmartAccount(account: StoredAccount): void {
+  const db = openStateDb()
+  db.prepare(`
+    INSERT INTO smart_accounts (alias, type, address, chain_id, owner_alias, factory, delegate, paymaster_policy, created_at)
+    VALUES (@alias, @type, @address, @chainId, @ownerAlias, @factory, @delegate, @paymasterPolicy, @createdAt)
+  `).run({
+    alias: account.alias,
+    type: account.type,
+    address: account.address,
+    chainId: account.chainId,
+    ownerAlias: account.ownerAlias,
+    factory: account.factory ?? null,
+    delegate: account.delegate ?? null,
+    paymasterPolicy: account.paymasterPolicy ?? null,
+    createdAt: account.createdAt,
+  })
+}
+
+export function getSmartAccount(alias: string): StoredAccount | null {
+  const db = openStateDb()
+  const row = db
+    .prepare('SELECT * FROM smart_accounts WHERE alias = ?')
+    .get(alias) as DbSmartAccount | undefined
+  return row ? rowToSmartAccount(row) : null
+}
+
+export function listSmartAccounts(chainId?: string): StoredAccount[] {
+  const db = openStateDb()
+  let rows: DbSmartAccount[]
+  if (chainId) {
+    rows = db
+      .prepare('SELECT * FROM smart_accounts WHERE chain_id = ? ORDER BY created_at ASC')
+      .all(chainId) as DbSmartAccount[]
+  } else {
+    rows = db
+      .prepare('SELECT * FROM smart_accounts ORDER BY created_at ASC')
+      .all() as DbSmartAccount[]
+  }
+  return rows.map(rowToSmartAccount)
+}
+
+export function smartAccountExists(alias: string): boolean {
+  const db = openStateDb()
+  return db.prepare('SELECT 1 FROM smart_accounts WHERE alias = ?').get(alias) !== undefined
+}
+
+// ─── Safe Transactions ───────────────────────────────────────────────────────
+
+export type StoredSafeTx = {
+  safeTxHash: string
+  safeAddress: string
+  chainId: string
+  toAddress: string
+  value: string
+  data: string | null
+  nonce: number | null
+  signatures: string | null
+  status: 'pending' | 'executed' | 'failed'
+  txHash: string | null
+  createdAt: number
+  updatedAt: number
+}
+
+type DbSafeTx = {
+  safe_tx_hash: string
+  safe_address: string
+  chain_id: string
+  to_address: string
+  value: string
+  data: string | null
+  nonce: number | null
+  signatures: string | null
+  status: string
+  tx_hash: string | null
+  created_at: number
+  updated_at: number
+}
+
+function rowToSafeTx(row: DbSafeTx): StoredSafeTx {
+  return {
+    safeTxHash: row.safe_tx_hash,
+    safeAddress: row.safe_address,
+    chainId: row.chain_id,
+    toAddress: row.to_address,
+    value: row.value,
+    data: row.data,
+    nonce: row.nonce,
+    signatures: row.signatures,
+    status: row.status as StoredSafeTx['status'],
+    txHash: row.tx_hash,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  }
+}
+
+export function insertSafeTx(tx: StoredSafeTx): void {
+  const db = openStateDb()
+  db.prepare(`
+    INSERT INTO safe_txs (safe_tx_hash, safe_address, chain_id, to_address, value, data, nonce, signatures, status, tx_hash, created_at, updated_at)
+    VALUES (@safeTxHash, @safeAddress, @chainId, @toAddress, @value, @data, @nonce, @signatures, @status, @txHash, @createdAt, @updatedAt)
+  `).run({
+    safeTxHash: tx.safeTxHash,
+    safeAddress: tx.safeAddress,
+    chainId: tx.chainId,
+    toAddress: tx.toAddress,
+    value: tx.value,
+    data: tx.data ?? null,
+    nonce: tx.nonce ?? null,
+    signatures: tx.signatures ?? null,
+    status: tx.status,
+    txHash: tx.txHash ?? null,
+    createdAt: tx.createdAt,
+    updatedAt: tx.updatedAt,
+  })
+}
+
+export function updateSafeTx(patch: {
+  safeTxHash: string
+  signatures?: string
+  status?: string
+  txHash?: string | null
+  updatedAt: number
+}): void {
+  const db = openStateDb()
+  db.prepare(`
+    UPDATE safe_txs SET
+      signatures = COALESCE(@signatures, signatures),
+      status = COALESCE(@status, status),
+      tx_hash = COALESCE(@txHash, tx_hash),
+      updated_at = @updatedAt
+    WHERE safe_tx_hash = @safeTxHash
+  `).run({
+    safeTxHash: patch.safeTxHash,
+    signatures: patch.signatures ?? null,
+    status: patch.status ?? null,
+    txHash: patch.txHash ?? null,
+    updatedAt: patch.updatedAt,
+  })
+}
+
+export function getSafeTx(safeTxHash: string): StoredSafeTx | null {
+  const db = openStateDb()
+  const row = db
+    .prepare('SELECT * FROM safe_txs WHERE safe_tx_hash = ?')
+    .get(safeTxHash) as DbSafeTx | undefined
+  return row ? rowToSafeTx(row) : null
+}
+
+export function listSafeTxs(safeAddress?: string): StoredSafeTx[] {
+  const db = openStateDb()
+  let rows: DbSafeTx[]
+  if (safeAddress) {
+    rows = db
+      .prepare('SELECT * FROM safe_txs WHERE LOWER(safe_address) = LOWER(?) ORDER BY created_at DESC')
+      .all(safeAddress) as DbSafeTx[]
+  } else {
+    rows = db
+      .prepare('SELECT * FROM safe_txs ORDER BY created_at DESC')
+      .all() as DbSafeTx[]
+  }
+  return rows.map(rowToSafeTx)
+}
+
 // ─── Deployment type ──────────────────────────────────────────────────────────
 
 export type Deployment = {

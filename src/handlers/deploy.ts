@@ -95,7 +95,7 @@ export async function handleDeploy(opts: {
       // CREATE2 deployment via deterministic factory
       const salt = opts.salt as Hex
       data = encodeCreate2Calldata(salt, initcode)
-      to = CREATE2_FACTORY
+      to = CREATE2_FACTORY as `0x${string}`
       const initcodeHash = hashInitcode(initcode)
       contractAddress = computeCreate2Address(CREATE2_FACTORY, salt, initcodeHash)
     } else {

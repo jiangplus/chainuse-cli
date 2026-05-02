@@ -18,13 +18,14 @@ function catchError(err: unknown): JsonResult<never> {
   }
 }
 
-function resolveFeedAddress(feed: string, chainId: string): Address | null {
+function resolveFeedAddress(feedInput: string, chainId: string): Address | null {
   // Check if it's a raw address
-  if (isAddress(feed)) {
-    return getAddress(feed) as Address
+  if (isAddress(feedInput)) {
+    return getAddress(feedInput) as Address
   }
   // Look up in registry
-  const chainFeeds = CHAINLINK_FEEDS[chainId]
+  const feed = feedInput as string
+  const chainFeeds: Record<string, string> | undefined = CHAINLINK_FEEDS[chainId]
   if (!chainFeeds) return null
   const addr = chainFeeds[feed.toUpperCase()] ?? chainFeeds[feed]
   return addr ? (addr as Address) : null
