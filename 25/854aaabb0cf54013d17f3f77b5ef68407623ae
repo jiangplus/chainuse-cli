@@ -1,0 +1,91 @@
+src/state/db-compat.ts
+  e94f2536cf53ff87 1-81
+tests/services/siwe.test.ts
+  e94f2536cf53ff87 1-87
+tests/handlers/deploy.test.ts
+  e94f2536cf53ff87 1-55
+tests/services/mcp.test.ts
+  e94f2536cf53ff87 1-93
+tests/handlers/account.test.ts
+  e94f2536cf53ff87 1-38
+tests/handlers/call.test.ts
+  e94f2536cf53ff87 1-62
+tests/chains/resolve.test.ts
+  e94f2536cf53ff87 1-100
+src/services/siwe.ts
+  e94f2536cf53ff87 57
+tests/services/audit.test.ts
+  e94f2536cf53ff87 1-75
+tests/policy/evaluate.test.ts
+  e94f2536cf53ff87 1-220
+tests/services/daemon.test.ts
+  e94f2536cf53ff87 1-133
+tests/handlers/wc.test.ts
+  e94f2536cf53ff87 1-61
+tests/handlers/send.test.ts
+  e94f2536cf53ff87 1-38
+tests/accounts/eoa.test.ts
+  e94f2536cf53ff87 1-71
+tests/handlers/tokens.test.ts
+  e94f2536cf53ff87 1-139
+tests/handlers/policy.test.ts
+  e94f2536cf53ff87 1-64
+tests/handlers/balance.test.ts
+  e94f2536cf53ff87 1-53
+tests/handlers/siwe.test.ts
+  e94f2536cf53ff87 1-107
+tests/registries/tokens.test.ts
+  e94f2536cf53ff87 1-70
+tests/helpers.ts
+  e94f2536cf53ff87 1-67
+tests/handlers/init.test.ts
+  e94f2536cf53ff87 1-43
+tests/handlers/safe.test.ts
+  e94f2536cf53ff87 1-107
+package.json
+  e94f2536cf53ff87 12-13
+src/keystore/index.ts
+  e94f2536cf53ff87 1,6,8-10,13,128
+src/state/index.ts
+  e94f2536cf53ff87 87,269
+src/handlers/safe.ts
+  e94f2536cf53ff87 66-76
+src/state/db.ts
+  e94f2536cf53ff87 1,4,6,8-9,11,16
+tests/handlers/price.test.ts
+  e94f2536cf53ff87 1-63
+tests/handlers/keys.test.ts
+  e94f2536cf53ff87 1-125
+tests/handlers/ledger.test.ts
+  e94f2536cf53ff87 1-61
+tests/handlers/ens.test.ts
+  e94f2536cf53ff87 1-55
+tests/handlers/aave.test.ts
+  e94f2536cf53ff87 1-65
+tests/handlers/swap.test.ts
+  e94f2536cf53ff87 1-56
+tests/handlers/tx.test.ts
+  e94f2536cf53ff87 1-49
+tests/services/swap.test.ts
+  e94f2536cf53ff87 1-63
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "25854aaabb0cf54013d17f3f77b5ef68407623ae",
+  "prompts": {
+    "e94f2536cf53ff87": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c23f4e2f-3390-40c9-ae25-9fb10af6af5a",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "jiangplus",
+      "messages": [],
+      "total_additions": 2463,
+      "total_deletions": 154,
+      "accepted_lines": 2334,
+      "overriden_lines": 0
+    }
+  }
+}
