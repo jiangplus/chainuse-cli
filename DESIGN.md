@@ -32,9 +32,12 @@ AI agents that hold or move on-chain assets need a wallet that is:
 | Chains | Ethereum + L2s (OP, Arbitrum, Base, Polygon, zkSync, Linea, Scroll), Solana, Bitcoin, Sui |
 | Account types | EOA, ERC-4337 SmartAccount, ERC-7702 delegated EOA, Gnosis Safe (multisig), Solana ed25519, BTC BIP-84/86, Sui ed25519 |
 | Token standards | ERC-20, ERC-721, ERC-1155, SPL, BRC-20 (read), Sui Coin / Object |
+| Stablecoins | First-class **USDC** and **USDT** verbs (`chain usdc …`, `chain usdt …`) across all supported EVM chains and Solana |
+| Token registry | Built-in symbol → address registry (USDC, USDT, WETH, WBTC, DAI, LINK, UNI, native wraps, LSTs, …); user-extensible |
 | DeFi | Uniswap v3/v4 swap, Squid Router cross-chain transfer + swap, **Aave v3 (supply / borrow / repay / withdraw / health)** |
 | Pricing | Chainlink price feeds (per-chain registry) |
 | Naming | ENS resolve / reverse / set-primary / records |
+| Auth | **Sign In With Ethereum (EIP-4361 / SIWE)** — build, sign, and verify SIWE messages |
 | Connectivity | WalletConnect v2 (pair, approve, listen, sign) |
 | Deployment | EVM contract deploy with CREATE / CREATE2 |
 | Provider | Alchemy (RPC + Enhanced APIs + Gas Manager + Account Kit) behind a chain-agnostic `Provider` interface; public-RPC / Infura swap-in |
@@ -117,7 +120,10 @@ src/
     tokens-erc20.ts
     tokens-erc721.ts
     tokens-erc1155.ts
+    tokens-registry.ts       # built-in (chain,symbol)→address; user overrides; resolver
+    stablecoins.ts           # USDC / USDT shortcut verbs over erc20 + spl
     sui-ptb.ts               # PTB builder for `chain sui ptb`
+    siwe.ts                  # Sign In With Ethereum (EIP-4361): build/sign/verify
   keystore/                # encrypted at rest
   policy/                  # YAML loader + evaluator
   state/                   # SQLite schema + repos
@@ -219,7 +225,25 @@ chain erc20  transfer | approve | allowance | balance | info
 chain erc721 transfer | mint    | owner     | tokenURI | balance
 chain erc1155 transfer | balance | uri      | batch-transfer
 chain spl   transfer | balance | mint
+
+# Stablecoin shortcut verbs (sugar over erc20/spl, with built-in token registry)
+chain usdc  transfer --to <addr|ens> --amount <v> [--chain ...]
+chain usdc  balance  <address|alias> [--chain all]
+chain usdt  transfer --to <addr|ens> --amount <v> [--chain ...]
+chain usdt  balance  <address|alias> [--chain all]
+
+# Token registry inspection
+chain tokens list   [--chain ...] [--symbol USDC]
+chain tokens info   <symbol|address> [--chain ...]
+chain tokens add    --chain <id> --symbol <S> --address 0x… --decimals N   # user override
+chain tokens remove --chain <id> --symbol <S>
 ```
+
+> **Symbol resolution.** Anywhere a token is accepted (`--asset`, `--from`, `--to`, `--token`, `--collateral`, `aave …`, `swap …`, `bridge …`), you may pass either:
+> - a raw address (`0x…`, base58 SPL mint, etc.), or
+> - a known symbol (`USDC`, `USDT`, `WETH`, `WBTC`, `DAI`, `LINK`, `UNI`, `ETH`, `SOL`, `SUI`, `BTC`, `MATIC`, `ARB`, `OP`, `BASE`, `cbBTC`, `wstETH`, `weETH`, …).
+>
+> Symbols are scoped per chain: `USDC` on `eip155:1` resolves to `0xA0b8…eB48`; `USDC` on `eip155:8453` resolves to `0x8335…2913`; `USDC` on Solana resolves to `EPjF…t1v`. The chain comes from `--chain` or the account's default. Ambiguity is rejected with `E_AMBIGUOUS_SYMBOL`.
 
 ### ENS
 ```
@@ -228,6 +252,25 @@ chain ens reverse   <address>                   # address → primary name
 chain ens set-primary <name> --account <alias>
 chain ens set-record  <name> <key> <value>      # avatar, url, com.twitter, ...
 ```
+
+### Sign In With Ethereum (EIP-4361)
+```
+chain siwe build    --domain <d> --uri <u> --account <alias>
+                    [--statement "..."] [--chain-id <n>] [--nonce <s>]
+                    [--issued-at <iso>] [--expiration <iso>] [--not-before <iso>]
+                    [--request-id <s>] [--resources <uri,uri,...>]
+                                                       # emits canonical EIP-4361 message
+chain siwe sign     --message-file <f> | --message "<text>" --account <alias>
+                                                       # → { message, signature, address }
+chain siwe login    --domain <d> --uri <u> --account <alias> [--statement ...] [--nonce ...]
+                                                       # one-shot: build + sign (uses fresh nonce if omitted)
+chain siwe verify   --message-file <f> | --message "<text>" --signature 0x…
+                    [--expected-domain <d>] [--expected-nonce <s>] [--expected-address 0x…|<ens>]
+                                                       # checks signature, domain, nonce, time bounds, chain-id;
+                                                       # supports EOA (ECDSA) AND smart-contract accounts via EIP-1271
+```
+
+> SIWE is a signing operation, not a transaction — but it still passes through the **policy engine** (`siwe.allowed_domains`, `siwe.deny_domains`) so an agent can be restricted to logging into specific dapps. WalletConnect `personal_sign` requests that match the SIWE format are routed through the same code path and policy hook.
 
 ### DeFi
 ```
@@ -496,8 +539,34 @@ accounts:
   audit.log            # append-only NDJSON
   registries/
     chainlink-feeds.json
-    tokens.json
+    tokens.json                  # built-in (chain,symbol)→{address,decimals,name,logo,canonical}
+  registries-user/
+    tokens.json                  # user overrides + additions; takes precedence over built-in
 ```
+
+### Built-in token registry
+
+Bundled at `registries/tokens.json`, structured by chain. Minimum coverage on day one:
+
+| Symbol | Notes |
+| --- | --- |
+| `USDC` | Native Circle USDC on every supported EVM chain (mainnet, Base, Arbitrum, Optimism, Polygon, Avalanche, zkSync, Linea, Scroll) and Solana mainnet (`EPjF…t1v`); `USDC.e` listed separately as bridged variant |
+| `USDT` | Tether on every supported EVM chain and Solana (`Es9v…1WT`) |
+| `DAI` | MakerDAO |
+| `WETH` | Canonical wrapped ETH per chain |
+| `WBTC`, `cbBTC` | Wrapped/Coinbase BTC variants |
+| `wstETH`, `weETH`, `rETH` | Major LSTs |
+| `LINK`, `UNI`, `AAVE`, `MATIC`, `ARB`, `OP` | Major governance/utility tokens |
+| Natives | `ETH`, `SOL`, `SUI`, `BTC`, `MATIC` resolve to the native asset of the given chain (sentinel address `0xEeee…EEeE` on EVM) |
+
+Resolution rules:
+1. If input matches `0x…` (EVM) or a base58 SPL mint, treat as raw address.
+2. Else look up `(chain, symbol)` in user registry; if found, use it.
+3. Else look up `(chain, symbol)` in built-in registry.
+4. If not found on the requested chain, fail with `E_UNKNOWN_TOKEN` (suggest `chain tokens add` or pass an address).
+5. If `--chain` is omitted and the symbol exists on multiple configured chains, fail with `E_AMBIGUOUS_SYMBOL` (suggest `--chain`).
+
+The registry stores `{address, decimals, name, symbol, logoURI?, canonical?: true}` so the wallet can format human-readable amounts without an extra `decimals()` call. `canonical: true` marks the issuer-blessed deployment (e.g. native Circle USDC vs. bridged `USDC.e`); the resolver prefers canonical when a symbol is ambiguous within one chain.
 
 `config.yaml` example:
 ```yaml
@@ -535,6 +604,8 @@ Env overrides: `ALCHEMY_API_KEY`, `CHAINUSE_PROFILE`, `CHAINUSE_PASSPHRASE`, `CH
 | --- | --- |
 | `E_BAD_INPUT` | malformed flag/arg |
 | `E_NOT_FOUND` | account/contract/feed/session unknown |
+| `E_UNKNOWN_TOKEN` | symbol not in registry on the requested chain |
+| `E_AMBIGUOUS_SYMBOL` | symbol resolves on multiple chains and `--chain` is missing |
 | `E_INSUFFICIENT_FUNDS` | balance < amount + fee |
 | `E_NONCE_CONFLICT` | mismatch with chain |
 | `E_PROVIDER` | RPC/network/upstream error |
@@ -587,7 +658,7 @@ Agents that already speak MCP get the wallet as a typed tool surface for free.
 | **M2** | ERC-20/721/1155, ENS, Chainlink price, EVM `deploy`, deployments registry |
 | **M3** | Solana, BTC, Sui adapters with `keys`, `balance`, `send` parity; `chain sui ptb` PTB builder |
 | **M4** | ERC-4337 (Light/Kernel/Safe via permissionless + Alchemy bundler/paymaster), ERC-7702, Safe multisig propose/confirm/execute |
-| **M5** | WalletConnect v2 (pair, approve, listen, sign) with policy gate |
+| **M5** | WalletConnect v2 (pair, approve, listen, sign) with policy gate; **SIWE (EIP-4361)** build/sign/login/verify with EIP-1271 support |
 | **M6** | Uniswap swap (v3+v4), Squid bridge, **Aave v3 lending** (incl. `min_health_factor_after_tx` policy), USD costing via Chainlink |
 | **M7** | Policy hardening (2FA, daily caps), audit, hardware wallet, **daemon (JSON-RPC) over `handlers/`** |
 | **M8** | **MCP adapter** over `handlers/` (typed tool schemas, resources, push notifications for WC + bridge status) |
@@ -629,10 +700,122 @@ These are committed roadmap items, not speculative. They influence the architect
   - Useful when an agent itself sells access to a tool/resource.
 - Keep x402 as a separate `services/x402/` module with its own challenge schema; reuse the Tx pipeline and policy engine for actual settlement.
 
-### Architectural impact today
+### Architectural impact today (CKB / x402)
 - `core/Tx.ts`, `core/Asset.ts`, `core/Account.ts` must not assume the EVM account model — they already don't (BTC + Sui force this), but CKB's Cell model is the strictest test. M1 reviews of these interfaces should validate against a hypothetical CKB adapter.
 - The policy engine schema reserves namespaces `aave.*`, `x402.*`, `ckb.*` so they don't need a breaking schema bump later.
 - `services/` directory is the standard place for new protocol integrations — Aave, x402, future protocols all follow the same shape (handler-callable module, not coupled to CLI flags).
+
+---
+
+## 18. Dependency Policy (Supply-chain Defense)
+
+A wallet is one of the highest-value supply-chain targets in software: a single malicious dependency update can ship key-exfiltration or transaction tampering to every install. Recent precedents — `event-stream`, `ua-parser-js`, the **`@solana/web3.js` v1.95.5–.7** key-stealing publish (Dec 2024), the **Ledger Connect Kit** drainer (Dec 2023), and the `xz-utils` backdoor — make permissive dependency hygiene unacceptable here. This section is a hard constraint on the project, enforced in CI and at release time.
+
+### 18.1 Principles
+1. **Minimize dependency surface.** Every transitive package is attack surface. Default answer is "vendor or write it"; adding a dep requires justification.
+2. **No automatic upgrades, ever.** No Dependabot auto-merge, no `^`/`~` ranges in production lockfile, no `npm install` in CI without `--frozen-lockfile`.
+3. **Cooldown before adoption.** No new package version is consumed until it has been public for **≥ 7 days** (longer for security-critical deps; see tiers).
+4. **Verify provenance.** Every direct dep must publish either signed releases (Sigstore / npm provenance / GitHub attestations) or be pinned to a commit SHA from a vendored Git source.
+5. **Defense in depth at runtime.** Even if a dep is malicious, runtime sandboxing limits blast radius (no network or filesystem access from packages that don't need it).
+6. **Reproducible build, signed release.** Anyone can rebuild bit-for-bit from the lockfile; the published binary is signed; SBOM is published with each release.
+
+### 18.2 Dependency tiers
+
+| Tier | Examples | Rules |
+| --- | --- | --- |
+| **T0 — Cryptographic / signing** | `@noble/curves`, `@noble/hashes`, `@scure/bip32`, `@scure/bip39`, `viem`/`ethers` signing paths | Allowlist by **maintainer + commit SHA**. No `^` ranges. Updates require manual review by 2 maintainers, ≥ 30-day cooldown, diff review of changed lines. Vendored where the package is small and stable (preferred for `@noble/*`). |
+| **T1 — Chain SDKs** | `@solana/web3.js`, `bitcoinjs-lib`, `@mysten/sui`, `permissionless`, `@safe-global/protocol-kit`, `@walletconnect/sign-client`, `@uniswap/sdk`, `@0xsquid/sdk`, `@aave/contract-helpers` | Pinned exact versions. ≥ 14-day cooldown. CI runs `npm audit signatures` / sigstore verify and `socket.dev` advisory check. Major-version bumps require a manual changelog review checklist (see §18.5). |
+| **T2 — Tooling / build** | `bun`, `typescript`, `vitest`, linters | Pinned exact versions. ≥ 7-day cooldown. Build tools cannot be imported by runtime code (enforced by lint rule). |
+| **T3 — Forbidden** | Anything under non-allowlisted scopes; packages with install scripts; packages with native (`node-gyp`) builds unless explicitly approved; deprecated packages | Hard-fail in CI. |
+
+The full allowlist lives at `policy/dependencies.yaml` and is the source of truth.
+
+### 18.3 Acquisition & integrity
+
+- **Single lockfile** (`bun.lockb` + a generated `package-lock.json` for tooling that needs it) is committed and is the only source of installed versions. CI installs with `--frozen-lockfile`. Any drift fails the build.
+- **No install scripts.** Set `ignore-scripts=true` (npm) and the equivalent for Bun. Postinstall scripts are the most common drainer vector (Ledger Connect Kit, multiple npm worm campaigns).
+- **Subresource integrity for fetched bytes.** Anything fetched at build time (binaries, WASM, ABIs) is pinned by SHA-256 in `policy/integrity.yaml`. CI verifies before use.
+- **Mirror sensitive deps.** T0 and T1 packages are mirrored into a private registry / Git submodule so a registry-side compromise (npm account takeover, registry hijack) cannot retroactively change what we install.
+- **No transitive `postinstall`.** A CI step walks the resolved tree and fails if any package declares `scripts.preinstall|install|postinstall` other than an allowlisted shortlist.
+
+### 18.4 Update workflow
+
+```
+                ┌──────────────────────────────────────────────┐
+new advisory →  │ open update PR (one dep per PR)              │
+or scheduled    │   ↓                                          │
+sweep           │ wait for cooldown window per tier            │
+                │   ↓                                          │
+                │ CI: signature/provenance verify              │
+                │     diff size & changed-files review         │
+                │     install-script audit                     │
+                │     test suite (incl. sign-and-broadcast on  │
+                │     local devnet for T0/T1)                  │
+                │   ↓                                          │
+                │ 2-maintainer human review for T0; 1 for T1   │
+                │   ↓                                          │
+                │ merge → next release                         │
+                └──────────────────────────────────────────────┘
+```
+
+- One dependency update per PR. No batched bumps. Reviewers must be able to read the diff.
+- For T0 updates the diff is read line-by-line. Anything touching key derivation, signing, RNG, or network IO is rejected unless the change is independently corroborated upstream (issue tracker, multiple maintainers).
+- The `chain` binary is **not** released between dep updates and a new audit cycle for T0 (i.e. no same-week ship of a `@noble/*` bump and a wallet release).
+
+### 18.5 Major-version review checklist (T1)
+
+A T1 major version (e.g. `viem 3 → 4`) requires explicit answers to all of:
+
+1. New maintainers since last version? (check npm `who`, GitHub contributor history)
+2. New transitive deps introduced? (diff `npm ls --all`)
+3. Any new `postinstall`/native builds anywhere in the new tree?
+4. New network endpoints, telemetry, or URLs hardcoded?
+5. Any change to signing, RNG, or key-derivation code paths?
+6. Sigstore / provenance attestation present and verifying?
+7. Any open security advisories filed against the new version (Snyk, GHSA, socket.dev)?
+
+A "no" on (1)–(5) and "yes" on (6)–(7) is required to merge.
+
+### 18.6 Runtime guards
+
+- **Permissions sandbox.** The CLI runs under Bun's `--allow-net` / `--allow-read` / `--allow-write` allowlists scoped to the configuration directory and the configured RPC hosts only. Packages cannot phone home to unknown hosts even if compromised.
+- **Egress allowlist.** A small embedded HTTP client wraps all outbound requests and rejects any host not in the per-chain provider list, the WC relay list, the Squid API, or the Chainlink registry hosts. Logged and refused on violation.
+- **No `eval` / `Function(...)`** — lint rule `no-implied-eval`, `no-new-func`. CI greps the resolved dep tree for `eval(`, `new Function(`, `vm.runIn*`, dynamic `require()` of computed strings, and flags any new occurrence (allowlist diff-based).
+- **Frozen prototypes** for global builtins at startup (`Object.freeze(Object.prototype)` etc.) to blunt prototype-pollution payloads.
+- **Keystore isolation.** All decryption and signing happens in a single module with no `require`/`import` from packages outside an explicit allowlist. Linted as a circular boundary.
+
+### 18.7 Build & release integrity
+
+- **Reproducible build.** `bun build --compile` from a clean container with the lockfile produces a binary whose SHA-256 is recorded in the GitHub release. A second maintainer rebuilds independently and signs off when hashes match.
+- **Signed releases.** Binaries signed with **cosign / Sigstore**. The `chain self-update` command (if shipped) verifies the signature against a pinned set of release-signing keys before replacing the binary.
+- **SBOM.** Each release ships a CycloneDX SBOM (`chain.sbom.json`) listing every transitive dep with version + integrity hash + license + provenance status.
+- **Distribution channels are pinned.** npm package, Homebrew tap, and GitHub release. We do not publish to any other registry. The release workflow runs only from a protected branch with branch-protection + required reviews; npm publishes use a granular access token scoped to this one package, stored as an OIDC-issued short-lived token (no long-lived `NPM_TOKEN` secret).
+
+### 18.8 CI enforcement (concrete checks, all blocking)
+
+| Check | Tool / command | Failure mode |
+| --- | --- | --- |
+| Lockfile unchanged unless PR explicitly updates a dep | `bun install --frozen-lockfile` | hard fail |
+| No new postinstall scripts in tree | custom script over resolved tree | hard fail |
+| Provenance / signature present for changed deps | `npm audit signatures` + sigstore verify | hard fail for T0/T1 |
+| Cooldown elapsed | custom check vs npm registry `time.<version>` | hard fail |
+| Tier compliance (allowlist + version pin) | reads `policy/dependencies.yaml` | hard fail |
+| Advisory clean | `osv-scanner`, `socket.dev` API | hard fail on critical/high |
+| No `eval` / dynamic require additions | grep + diff against last release | hard fail |
+| Reproducible build hash matches | rebuild in clean container, compare SHA-256 | hard fail |
+| SBOM generated and attached | `cyclonedx-bun` or equivalent | hard fail if missing |
+
+### 18.9 Incident response
+
+If a dep we depend on is reported compromised:
+
+1. Within 1 hour: pin to last known-good version; publish advisory in repo + release notes.
+2. Revoke any credentials the build pipeline could have leaked (npm tokens, signing keys if exposure plausible).
+3. Inspect telemetry / egress logs from the egress allowlist for any anomalous resolution attempts.
+4. Cut a patch release with the rollback; rotate release-signing keys if compromise scope is unclear.
+5. Postmortem published in repo within 7 days.
+
+A `SECURITY.md` at the repo root documents the disclosure channel (signed email + PGP key), expected response times, and bounty scope (out of scope: anything mitigated by §18.6 sandbox alone).
 
 ---
 
@@ -648,7 +831,10 @@ These are committed roadmap items, not speculative. They influence the architect
 | ERC-4337 & ERC-7702 | §4, §5 (`account create`) |
 | Gnosis Safe | §4, §5 (`safe *`) |
 | WalletConnect | §8, §5 (`wc *`) |
+| Sign In With Ethereum (EIP-4361) | §5 (`siwe *`), §11 (`siwe.allowed_domains` / `siwe.deny_domains`) |
 | ERC-20/721/1155 | §9, §5 (`erc20|erc721|erc1155`) |
+| USDC / USDT first-class | §5 (`usdc`, `usdt`), §12 (token registry) |
+| Built-in token registry | §5 (`tokens *`), §12 (registry + resolver rules) |
 | Asset & price queries | §6, §7 (`assets`, `price`) |
 | ENS | §5 (`ens *`) |
 | Uniswap swap | §7, §5 (`swap *`) |
@@ -661,3 +847,4 @@ These are committed roadmap items, not speculative. They influence the architect
 | Future: Nervos CKB | §17 |
 | Future: x402 provider + consumer | §17 |
 | AI-agent ergonomics | §2, §13, §14 |
+| Supply-chain defense / dependency policy | §18 |
