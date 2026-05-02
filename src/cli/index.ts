@@ -60,6 +60,21 @@ import {
   handleSafeQueue,
 } from '../handlers/safe.js'
 import {
+  handleWcPair,
+  handleWcApprove,
+  handleWcReject,
+  handleWcSessions,
+  handleWcDisconnect,
+  handleWcPending,
+  handleWcSign,
+} from '../handlers/wc.js'
+import {
+  handleSiweBuild,
+  handleSiweSign,
+  handleSiweVerify,
+  handleSiweLogin,
+} from '../handlers/siwe.js'
+import {
   printResult,
   success,
   info,
@@ -1412,6 +1427,290 @@ export function buildCLI(): Command {
             )
           }
           console.log()
+        },
+        parentOpts
+      )
+      if (!result.ok) process.exit(exitCodeFor(result.error.code))
+    })
+
+  // ─── chain wc ──────────────────────────────────────────────────────────────
+
+  const wcCmd = program.command('wc').description('WalletConnect v2 session management')
+
+  wcCmd
+    .command('pair')
+    .description('Pair with a dApp using a WalletConnect URI')
+    .requiredOption('--uri <uri>', 'WalletConnect pairing URI (wc:...)')
+    .action(async (opts, cmd) => {
+      const parentOpts = cmd.parent?.parent?.opts() ?? {}
+      const result = await handleWcPair({ uri: opts.uri })
+      printResult(
+        result,
+        (data) => {
+          success(`Paired with: ${data.peerName}`)
+          label('Pairing Topic', data.pairingTopic)
+          if (data.peerUrl) label('dApp URL', data.peerUrl)
+          label('Required Chains', data.requiredChains.join(', '))
+          label('Required Methods', data.requiredMethods.join(', '))
+          if (data.optionalChains?.length) label('Optional Chains', data.optionalChains.join(', '))
+          info('\nRun "chain wc approve --pairing-topic <topic> --owner <alias>" to approve')
+        },
+        parentOpts
+      )
+      if (!result.ok) process.exit(exitCodeFor(result.error.code))
+    })
+
+  wcCmd
+    .command('approve')
+    .description('Approve a WalletConnect session proposal')
+    .requiredOption('--pairing-topic <topic>', 'Pairing topic from wc pair')
+    .requiredOption('--owner <alias>', 'Account alias to connect')
+    .option('--chain <id>', 'Chain ID or alias')
+    .action(async (opts, cmd) => {
+      const parentOpts = cmd.parent?.parent?.opts() ?? {}
+      const result = await handleWcApprove({
+        pairingTopic: opts.pairingTopic,
+        ownerAlias: opts.owner,
+        chain: opts.chain,
+      })
+      printResult(
+        result,
+        (data) => {
+          success(`Session approved with: ${data.peerName}`)
+          label('Session Topic', data.sessionTopic)
+          label('Accounts', data.accounts.join(', '))
+          label('Chains', data.chains.join(', '))
+        },
+        parentOpts
+      )
+      if (!result.ok) process.exit(exitCodeFor(result.error.code))
+    })
+
+  wcCmd
+    .command('reject')
+    .description('Reject a WalletConnect session proposal')
+    .requiredOption('--pairing-topic <topic>', 'Pairing topic from wc pair')
+    .action(async (opts, cmd) => {
+      const parentOpts = cmd.parent?.parent?.opts() ?? {}
+      const result = await handleWcReject({ pairingTopic: opts.pairingTopic })
+      printResult(
+        result,
+        () => { success('Session proposal rejected') },
+        parentOpts
+      )
+      if (!result.ok) process.exit(exitCodeFor(result.error.code))
+    })
+
+  wcCmd
+    .command('sessions')
+    .description('List active WalletConnect sessions')
+    .action(async (_opts, cmd) => {
+      const parentOpts = cmd.parent?.parent?.opts() ?? {}
+      const result = await handleWcSessions()
+      printResult(
+        result,
+        (data) => {
+          if (data.length === 0) {
+            info('No active WalletConnect sessions. Run "chain wc pair" to connect.')
+            return
+          }
+          console.log(chalk.bold(`\n${'TOPIC'.padEnd(68)} ${'PEER'.padEnd(32)} CHAINS`))
+          console.log('─'.repeat(130))
+          for (const s of data) {
+            console.log(
+              `${chalk.magenta(s.topic.substring(0, 66).padEnd(68))} ${s.peerName.padEnd(32)} ${s.chains.join(',')}`
+            )
+          }
+          console.log()
+        },
+        parentOpts
+      )
+      if (!result.ok) process.exit(exitCodeFor(result.error.code))
+    })
+
+  wcCmd
+    .command('disconnect')
+    .description('Disconnect a WalletConnect session')
+    .requiredOption('--topic <topic>', 'Session topic')
+    .action(async (opts, cmd) => {
+      const parentOpts = cmd.parent?.parent?.opts() ?? {}
+      const result = await handleWcDisconnect({ topic: opts.topic })
+      printResult(
+        result,
+        () => { success('Session disconnected') },
+        parentOpts
+      )
+      if (!result.ok) process.exit(exitCodeFor(result.error.code))
+    })
+
+  wcCmd
+    .command('pending')
+    .description('List pending incoming WalletConnect signature requests')
+    .action(async (_opts, cmd) => {
+      const parentOpts = cmd.parent?.parent?.opts() ?? {}
+      const result = await handleWcPending()
+      printResult(
+        result,
+        (data) => {
+          if (data.length === 0) {
+            info('No pending WalletConnect requests.')
+            return
+          }
+          console.log(chalk.bold(`\n${'ID'.padEnd(20)} ${'METHOD'.padEnd(30)} TOPIC`))
+          console.log('─'.repeat(100))
+          for (const p of data) {
+            console.log(
+              `${p.id.padEnd(20)} ${p.method.padEnd(30)} ${p.topic.substring(0, 40)}`
+            )
+          }
+          console.log()
+        },
+        parentOpts
+      )
+      if (!result.ok) process.exit(exitCodeFor(result.error.code))
+    })
+
+  wcCmd
+    .command('sign')
+    .description('Sign a pending WalletConnect request')
+    .requiredOption('--request-id <id>', 'Request ID from wc pending')
+    .requiredOption('--owner <alias>', 'Account alias to sign with')
+    .option('--chain <id>', 'Chain ID or alias')
+    .action(async (opts, cmd) => {
+      const parentOpts = cmd.parent?.parent?.opts() ?? {}
+      const result = await handleWcSign({
+        requestId: opts.requestId,
+        ownerAlias: opts.owner,
+        chain: opts.chain,
+      })
+      printResult(
+        result,
+        (data) => {
+          success('Request signed and responded to dApp')
+          label('Result', data.result)
+        },
+        parentOpts
+      )
+      if (!result.ok) process.exit(exitCodeFor(result.error.code))
+    })
+
+  // ─── chain siwe ────────────────────────────────────────────────────────────
+
+  const siweCmd = program.command('siwe').description('Sign In With Ethereum (EIP-4361)')
+
+  siweCmd
+    .command('build')
+    .description('Build a SIWE message (EIP-4361) without signing')
+    .requiredOption('--domain <domain>', 'Service domain (e.g. app.example.com)')
+    .requiredOption('--owner <alias>', 'Account alias')
+    .requiredOption('--uri <uri>', 'URI of the service (e.g. https://app.example.com/login)')
+    .option('--statement <text>', 'Human-readable statement')
+    .option('--chain <id>', 'Chain ID or alias')
+    .option('--nonce <nonce>', 'Custom nonce (default: random)')
+    .option('--expiration-time <iso>', 'Expiration time (ISO 8601)')
+    .option('--resource <uri...>', 'Resources to include')
+    .action(async (opts, cmd) => {
+      const parentOpts = cmd.parent?.parent?.opts() ?? {}
+      const result = await handleSiweBuild({
+        domain: opts.domain,
+        ownerAlias: opts.owner,
+        uri: opts.uri,
+        statement: opts.statement,
+        chain: opts.chain,
+        nonce: opts.nonce,
+        expirationTime: opts.expirationTime,
+        resources: opts.resource,
+      })
+      printResult(
+        result,
+        (data) => {
+          console.log(chalk.bold('\nSIWE Message:'))
+          console.log(chalk.cyan(data.message))
+          console.log()
+          label('Nonce', data.nonce)
+          label('Issued At', data.issuedAt)
+        },
+        parentOpts
+      )
+      if (!result.ok) process.exit(exitCodeFor(result.error.code))
+    })
+
+  siweCmd
+    .command('sign')
+    .description('Sign a SIWE message')
+    .requiredOption('--message <text>', 'SIWE message text')
+    .requiredOption('--owner <alias>', 'Account alias to sign with')
+    .action(async (opts, cmd) => {
+      const parentOpts = cmd.parent?.parent?.opts() ?? {}
+      const result = await handleSiweSign({ message: opts.message, ownerAlias: opts.owner })
+      printResult(
+        result,
+        (data) => {
+          success('SIWE message signed')
+          label('Signature', formatHash(data.signature))
+        },
+        parentOpts
+      )
+      if (!result.ok) process.exit(exitCodeFor(result.error.code))
+    })
+
+  siweCmd
+    .command('verify')
+    .description('Verify a SIWE message and signature')
+    .requiredOption('--message <text>', 'SIWE message text')
+    .requiredOption('--signature <hex>', 'Signature hex')
+    .action(async (opts, cmd) => {
+      const parentOpts = cmd.parent?.parent?.opts() ?? {}
+      const result = await handleSiweVerify({ message: opts.message, signature: opts.signature })
+      printResult(
+        result,
+        (data) => {
+          if (data.valid) {
+            success('Signature is valid')
+            if (data.address) label('Address', formatAddress(data.address))
+            if (data.domain) label('Domain', data.domain)
+            if (data.chainId) label('Chain ID', String(data.chainId))
+          } else {
+            warn(`Signature is invalid: ${data.error ?? 'unknown'}`)
+          }
+        },
+        parentOpts
+      )
+      if (!result.ok) process.exit(exitCodeFor(result.error.code))
+    })
+
+  siweCmd
+    .command('login')
+    .description('Build and sign a SIWE message in one step')
+    .requiredOption('--domain <domain>', 'Service domain')
+    .requiredOption('--owner <alias>', 'Account alias')
+    .requiredOption('--uri <uri>', 'Service URI')
+    .option('--statement <text>', 'Human-readable statement')
+    .option('--chain <id>', 'Chain ID or alias')
+    .option('--nonce <nonce>', 'Custom nonce (default: random)')
+    .option('--expiration-time <iso>', 'Expiration time (ISO 8601)')
+    .option('--resource <uri...>', 'Resources to include')
+    .action(async (opts, cmd) => {
+      const parentOpts = cmd.parent?.parent?.opts() ?? {}
+      const result = await handleSiweLogin({
+        domain: opts.domain,
+        ownerAlias: opts.owner,
+        uri: opts.uri,
+        statement: opts.statement,
+        chain: opts.chain,
+        nonce: opts.nonce,
+        expirationTime: opts.expirationTime,
+        resources: opts.resource,
+      })
+      printResult(
+        result,
+        (data) => {
+          success('SIWE login completed')
+          label('Nonce', data.nonce)
+          label('Issued At', data.issuedAt)
+          label('Signature', formatHash(data.signature))
+          console.log(chalk.bold('\nMessage:'))
+          console.log(chalk.dim(data.message))
         },
         parentOpts
       )

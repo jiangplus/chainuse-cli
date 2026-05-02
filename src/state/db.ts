@@ -92,5 +92,24 @@ function migrate(db: Database.Database): void {
       created_at INTEGER,
       updated_at INTEGER
     );
+
+    CREATE TABLE IF NOT EXISTS wc_sessions (
+      topic TEXT PRIMARY KEY,
+      peer_name TEXT NOT NULL,
+      peer_url TEXT,
+      peer_icons TEXT,
+      accounts TEXT NOT NULL,
+      chains TEXT NOT NULL,
+      expiry INTEGER NOT NULL,
+      created_at INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS wc_pending (
+      id TEXT PRIMARY KEY,
+      topic TEXT NOT NULL,
+      method TEXT NOT NULL,
+      params TEXT NOT NULL,
+      created_at INTEGER NOT NULL
+    );
   `)
 }

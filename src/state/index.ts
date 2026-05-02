@@ -361,6 +361,133 @@ export function listDeployments(chainId?: string): Deployment[] {
   return rows.map(rowToDeployment)
 }
 
+// ─── WalletConnect Sessions ───────────────────────────────────────────────────
+
+export type StoredWcSession = {
+  topic: string
+  peerName: string
+  peerUrl?: string
+  peerIcons?: string[]
+  accounts: string[]
+  chains: string[]
+  expiry: number
+  createdAt: number
+}
+
+export type StoredWcPending = {
+  id: string
+  topic: string
+  method: string
+  params: unknown
+  createdAt: number
+}
+
+type DbWcSession = {
+  topic: string
+  peer_name: string
+  peer_url: string | null
+  peer_icons: string | null
+  accounts: string
+  chains: string
+  expiry: number
+  created_at: number
+}
+
+type DbWcPending = {
+  id: string
+  topic: string
+  method: string
+  params: string
+  created_at: number
+}
+
+function rowToWcSession(row: DbWcSession): StoredWcSession {
+  return {
+    topic: row.topic,
+    peerName: row.peer_name,
+    peerUrl: row.peer_url ?? undefined,
+    peerIcons: row.peer_icons ? JSON.parse(row.peer_icons) : undefined,
+    accounts: JSON.parse(row.accounts),
+    chains: JSON.parse(row.chains),
+    expiry: row.expiry,
+    createdAt: row.created_at,
+  }
+}
+
+function rowToWcPending(row: DbWcPending): StoredWcPending {
+  return {
+    id: row.id,
+    topic: row.topic,
+    method: row.method,
+    params: JSON.parse(row.params),
+    createdAt: row.created_at,
+  }
+}
+
+export function upsertWcSession(session: StoredWcSession): void {
+  const db = openStateDb()
+  db.prepare(`
+    INSERT OR REPLACE INTO wc_sessions (topic, peer_name, peer_url, peer_icons, accounts, chains, expiry, created_at)
+    VALUES (@topic, @peerName, @peerUrl, @peerIcons, @accounts, @chains, @expiry, @createdAt)
+  `).run({
+    topic: session.topic,
+    peerName: session.peerName,
+    peerUrl: session.peerUrl ?? null,
+    peerIcons: session.peerIcons ? JSON.stringify(session.peerIcons) : null,
+    accounts: JSON.stringify(session.accounts),
+    chains: JSON.stringify(session.chains),
+    expiry: session.expiry,
+    createdAt: session.createdAt,
+  })
+}
+
+export function deleteWcSession(topic: string): void {
+  const db = openStateDb()
+  db.prepare('DELETE FROM wc_sessions WHERE topic = ?').run(topic)
+}
+
+export function getWcSession(topic: string): StoredWcSession | null {
+  const db = openStateDb()
+  const row = db.prepare('SELECT * FROM wc_sessions WHERE topic = ?').get(topic) as DbWcSession | undefined
+  return row ? rowToWcSession(row) : null
+}
+
+export function listWcSessions(): StoredWcSession[] {
+  const db = openStateDb()
+  const rows = db.prepare('SELECT * FROM wc_sessions ORDER BY created_at DESC').all() as DbWcSession[]
+  return rows.map(rowToWcSession)
+}
+
+export function insertWcPending(pending: StoredWcPending): void {
+  const db = openStateDb()
+  db.prepare(`
+    INSERT OR REPLACE INTO wc_pending (id, topic, method, params, created_at)
+    VALUES (@id, @topic, @method, @params, @createdAt)
+  `).run({
+    id: pending.id,
+    topic: pending.topic,
+    method: pending.method,
+    params: JSON.stringify(pending.params),
+    createdAt: pending.createdAt,
+  })
+}
+
+export function deleteWcPending(id: string): void {
+  const db = openStateDb()
+  db.prepare('DELETE FROM wc_pending WHERE id = ?').run(id)
+}
+
+export function listWcPending(topic?: string): StoredWcPending[] {
+  const db = openStateDb()
+  let rows: DbWcPending[]
+  if (topic) {
+    rows = db.prepare('SELECT * FROM wc_pending WHERE topic = ? ORDER BY created_at ASC').all(topic) as DbWcPending[]
+  } else {
+    rows = db.prepare('SELECT * FROM wc_pending ORDER BY created_at ASC').all() as DbWcPending[]
+  }
+  return rows.map(rowToWcPending)
+}
+
 // ─── Internal types ──────────────────────────────────────────────────────────
 
 type DbAccount = {
