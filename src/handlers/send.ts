@@ -367,7 +367,11 @@ export async function handleSend(opts: {
       }
     }
 
-    if (opts.asset === 'native') {
+    const assetNorm = opts.asset.toUpperCase().startsWith('ERC20:')
+      ? 'ERC20:' + opts.asset.slice(opts.asset.indexOf(':') + 1)
+      : opts.asset.toLowerCase()
+
+    if (assetNorm === 'native') {
       const prepResult = await handleTxPrepare({
         to: opts.to,
         value: opts.amount,
@@ -378,8 +382,8 @@ export async function handleSend(opts: {
       return finalizeSend(prepResult.data.id, opts)
     }
 
-    if (opts.asset.startsWith('ERC20:')) {
-      const tokenAddr = opts.asset.slice(6)
+    if (assetNorm.startsWith('ERC20:')) {
+      const tokenAddr = assetNorm.slice(6)
       if (!isAddress(tokenAddr)) {
         return {
           ok: false,
@@ -411,7 +415,7 @@ export async function handleSend(opts: {
       ok: false,
       error: {
         code: ErrorCode.MISSING_ARGUMENT,
-        message: `Unknown asset: ${opts.asset}. Use "native" or "ERC20:0x..."`,
+        message: `Unknown asset: "${opts.asset}". Use "native" or "ERC20:0x…" (case-insensitive).`,
       },
     }
   } catch (err: unknown) {

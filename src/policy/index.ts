@@ -2,7 +2,7 @@ import { readFileSync, existsSync } from 'node:fs'
 import yaml from 'js-yaml'
 import { getPolicyPath } from '../config/index.js'
 import type { PolicyConfig, PolicyDecision, TxEnvelope } from '../core/types.js'
-import { formatUnits } from 'viem'
+import { formatUnits, isAddress } from 'viem'
 import { getAuditSpendToday } from '../state/index.js'
 
 export function loadPolicy(): PolicyConfig {
@@ -31,6 +31,11 @@ export async function evaluatePolicy(
   const allowedChains = accountRule.allowed_chains ?? policy.defaults.allowed_chains
   const allowedContracts = accountRule.allowed_contracts ?? policy.defaults.allowed_contracts
   const deniedContracts = accountRule.denied_contracts ?? policy.defaults.denied_contracts
+
+  // Validate envelope.to before any address comparisons
+  if (!isAddress(envelope.to)) {
+    return { decision: 'deny', reasons: [`Invalid destination address: "${envelope.to}"`] }
+  }
 
   // Chain allowlist
   if (allowedChains && allowedChains.length > 0) {

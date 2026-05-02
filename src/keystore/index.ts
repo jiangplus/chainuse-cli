@@ -41,7 +41,8 @@ type KeyMaterial = {
 }
 
 function deriveKey(passphrase: string, salt: Uint8Array): Uint8Array {
-  return scrypt(passphrase, salt, { N: 32768, r: 8, p: 1, dkLen: 32 })
+  // N=262144 (2^18) matches go-ethereum keystore standard; 8× harder than the previous 2^15.
+  return scrypt(passphrase, salt, { N: 262144, r: 8, p: 1, dkLen: 32 })
 }
 
 async function encryptData(key: Uint8Array, plaintext: string): Promise<{ nonce: Buffer; ciphertext: Buffer }> {

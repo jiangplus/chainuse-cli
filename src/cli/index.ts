@@ -367,14 +367,11 @@ export function buildCLI(): Command {
     .description('Sign a prepared transaction (policy-gated)')
     .requiredOption('--tx-id <id>', 'Transaction ID from tx prepare')
     .option('--passphrase <pass>', 'Encryption passphrase (or set CHAINUSE_PASSPHRASE)')
-    .option('--eth-price <usd>', 'ETH price in USD for policy evaluation (default: 3000)')
     .action(async (opts, cmd) => {
       const parentOpts = cmd.parent?.parent?.opts() ?? {}
-      const ethPrice = opts.ethPrice ? parseFloat(opts.ethPrice) : undefined
       const result = await handleTxSign({
         txId: opts.txId,
         passphrase: opts.passphrase,
-        ethPriceUsd: ethPrice,
       })
       printResult(
         result,
@@ -2078,9 +2075,20 @@ export function buildCLI(): Command {
     .description('Open policy.yaml in $EDITOR')
     .action(async () => {
       const { spawnSync } = await import('node:child_process')
+      const { resolve, isAbsolute } = await import('node:path')
+      const { statSync } = await import('node:fs')
       const policyPath = getPolicyPath()
-      const editor = process.env.EDITOR ?? 'vi'
-      spawnSync(editor, [policyPath], { stdio: 'inherit' })
+      const rawEditor = process.env.EDITOR ?? 'vi'
+      // Allowlist known safe editors; also accept absolute paths that resolve to a regular file.
+      const ALLOWED_EDITORS = new Set(['vi', 'vim', 'nvim', 'nano', 'emacs', 'micro', 'code', 'subl', 'gedit', 'kate'])
+      const editorBasename = rawEditor.split('/').pop() ?? rawEditor
+      const isKnown = ALLOWED_EDITORS.has(editorBasename)
+      const isAbsFile = isAbsolute(rawEditor) && (() => { try { return statSync(rawEditor).isFile() } catch { return false } })()
+      if (!isKnown && !isAbsFile) {
+        printResult({ ok: false, error: { code: 'INVALID_EDITOR', message: `EDITOR="${rawEditor}" is not in the allowed list. Set EDITOR to one of: ${[...ALLOWED_EDITORS].join(', ')}` } })
+        process.exit(1)
+      }
+      spawnSync(rawEditor, [policyPath], { stdio: 'inherit' })
     })
 
   policyCmd
@@ -2090,22 +2098,26 @@ export function buildCLI(): Command {
     .requiredOption('--chain <id>', 'Chain ID (e.g. 1, 8453)')
     .requiredOption('--to <address>', 'Target contract address')
     .option('--value-eth <amount>', 'ETH value (default: 0)', '0')
-    .option('--eth-price <usd>', 'ETH price in USD for evaluation', '3000')
     .action(async (opts) => {
       const { loadPolicy, evaluatePolicy } = await import('../policy/index.js')
+      const { loadConfig, resolveChainFromConfig } = await import('../config/index.js')
+      const { fetchEthPriceUsd } = await import('../handlers/tx.js')
       try {
         const policy = loadPolicy()
+        const config = loadConfig()
+        const chainId = resolveChainFromConfig(config, opts.chain)
+        const ethPrice = await fetchEthPriceUsd(config, chainId)
         const envelope = {
           id: 'dry-run',
           status: 'prepared' as const,
-          chainId: `eip155:${opts.chain}`,
+          chainId,
           from: '0x0000000000000000000000000000000000000000',
           to: opts.to,
           value: BigInt(Math.round(parseFloat(opts.valueEth ?? '0') * 1e18)),
           createdAt: Date.now(),
           updatedAt: Date.now(),
         }
-        const decision = await evaluatePolicy(policy, envelope, parseFloat(opts.ethPrice ?? '3000'), opts.account)
+        const decision = await evaluatePolicy(policy, envelope, ethPrice, opts.account)
         if (decision.decision === 'allow') {
           success('Policy: ALLOW')
         } else {

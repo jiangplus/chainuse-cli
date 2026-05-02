@@ -491,20 +491,23 @@ export function listWcPending(topic?: string): StoredWcPending[] {
 // ─── Audit spend tracking ────────────────────────────────────────────────────
 
 export function getAuditSpendToday(accountAlias: string): number {
+  // On any DB error return Infinity so the daily cap conservatively denies further txns
+  // rather than silently resetting the counter to zero.
   try {
     const db = openStateDb()
-    const startOfDay = new Date()
-    startOfDay.setHours(0, 0, 0, 0)
+    // Use UTC midnight to avoid local-timezone rollover attacks (M-2).
+    const now = new Date()
+    const startOfDayUtc = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))
     const row = db
       .prepare(
         `SELECT COALESCE(SUM(CAST(value_usd AS REAL)), 0) as total
          FROM audit_log
          WHERE account = ? AND ts >= ? AND decision = 'allow'`
       )
-      .get(accountAlias, startOfDay.toISOString()) as { total: number }
+      .get(accountAlias, startOfDayUtc.toISOString()) as { total: number } | null
     return row?.total ?? 0
   } catch {
-    return 0
+    return Infinity
   }
 }
 

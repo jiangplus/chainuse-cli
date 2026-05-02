@@ -2,6 +2,8 @@ import { isAddress, getAddress, parseUnits, type Hex } from 'viem'
 import { randomUUID } from 'node:crypto'
 import { loadConfig, resolveChainFromConfig } from '../config/index.js'
 import { buildProvider } from '../providers/index.js'
+import { getPrice } from '../services/price-chainlink.js'
+import { CHAINLINK_FEEDS } from '../registries/chainlink-feeds.js'
 import {
   estimateGas,
   getMaxPriorityFeePerGas,
@@ -139,10 +141,22 @@ export async function handleTxPrepare(opts: {
   }
 }
 
+export async function fetchEthPriceUsd(config: ReturnType<typeof loadConfig>, chainId: string): Promise<number> {
+  try {
+    const feeds = CHAINLINK_FEEDS[chainId] as Record<string, string> | undefined
+    const feedAddr = feeds?.['ETH/USD']
+    if (!feedAddr) return 3000 // chain has no ETH/USD feed; conservative fallback
+    const client = buildProvider(config, chainId)
+    const result = await getPrice(client, feedAddr as `0x${string}`)
+    return parseFloat(result.price)
+  } catch {
+    return 3000 // oracle unavailable; use conservative fallback
+  }
+}
+
 export async function handleTxSign(opts: {
   txId: string
   passphrase?: string
-  ethPriceUsd?: number
 }): Promise<JsonResult<SignResult>> {
   try {
     const envelope = getTx(opts.txId)
@@ -163,9 +177,10 @@ export async function handleTxSign(opts: {
       }
     }
 
-    // Policy evaluation
+    // Policy evaluation — ETH price always fetched from Chainlink; never caller-supplied.
     const policy = loadPolicy()
-    const ethPrice = opts.ethPriceUsd ?? 3000 // fallback if no oracle
+    const config = loadConfig()
+    const ethPrice = await fetchEthPriceUsd(config, envelope.chainId)
     const fromAlias = listAccounts().find((a) => a.address.toLowerCase() === envelope.from.toLowerCase())?.alias ?? envelope.from
     const policyResult = await evaluatePolicy(policy, envelope, ethPrice, fromAlias)
 

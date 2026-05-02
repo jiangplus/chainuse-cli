@@ -356,7 +356,7 @@ export async function startMcpHttp(opts: { port?: number; host?: string } = {}):
 
   const httpServer = createServer(async (req, res) => {
     const transport = new StreamableHTTPServerTransport({
-      sessionIdGenerator: () => Math.random().toString(36).slice(2),
+      sessionIdGenerator: () => { const { randomBytes } = require('node:crypto'); return randomBytes(16).toString('hex') },
     })
     await server.connect(transport)
     await transport.handleRequest(req, res)
