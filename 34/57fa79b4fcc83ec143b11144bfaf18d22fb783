@@ -1,0 +1,37 @@
+src/cli/index.ts
+  e94f2536cf53ff87 63-76,1436-1719
+src/state/index.ts
+  e94f2536cf53ff87 364-490
+src/state/db.ts
+  e94f2536cf53ff87 95-113
+src/handlers/wc.ts
+  e94f2536cf53ff87 1-189
+package.json
+  e94f2536cf53ff87 24-25,34
+src/services/siwe.ts
+  e94f2536cf53ff87 1-97
+src/handlers/siwe.ts
+  e94f2536cf53ff87 1-143
+src/services/walletconnect.ts
+  e94f2536cf53ff87 1-260
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "3457fa79b4fcc83ec143b11144bfaf18d22fb783",
+  "prompts": {
+    "e94f2536cf53ff87": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c23f4e2f-3390-40c9-ae25-9fb10af6af5a",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "jiangplus",
+      "messages": [],
+      "total_additions": 1137,
+      "total_deletions": 0,
+      "accepted_lines": 1137,
+      "overriden_lines": 0
+    }
+  }
+}
