@@ -111,5 +111,20 @@ function migrate(db: Database.Database): void {
       params TEXT NOT NULL,
       created_at INTEGER NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS audit_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      ts TEXT NOT NULL,
+      op TEXT NOT NULL,
+      account TEXT NOT NULL,
+      chain TEXT NOT NULL,
+      to_address TEXT,
+      value_eth TEXT,
+      value_usd TEXT,
+      gas_usd TEXT,
+      hash TEXT,
+      decision TEXT NOT NULL,
+      reasons TEXT NOT NULL
+    );
   `)
 }

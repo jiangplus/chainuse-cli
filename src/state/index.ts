@@ -488,6 +488,50 @@ export function listWcPending(topic?: string): StoredWcPending[] {
   return rows.map(rowToWcPending)
 }
 
+// ─── Audit spend tracking ────────────────────────────────────────────────────
+
+export function getAuditSpendToday(accountAlias: string): number {
+  try {
+    const db = openStateDb()
+    const startOfDay = new Date()
+    startOfDay.setHours(0, 0, 0, 0)
+    const row = db
+      .prepare(
+        `SELECT COALESCE(SUM(CAST(value_usd AS REAL)), 0) as total
+         FROM audit_log
+         WHERE account = ? AND ts >= ? AND decision = 'allow'`
+      )
+      .get(accountAlias, startOfDay.toISOString()) as { total: number }
+    return row?.total ?? 0
+  } catch {
+    return 0
+  }
+}
+
+export function insertAuditEntry(entry: import('../core/types.js').AuditEntry): void {
+  try {
+    const db = openStateDb()
+    db.prepare(
+      `INSERT INTO audit_log (ts, op, account, chain, to_address, value_eth, value_usd, gas_usd, hash, decision, reasons)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(
+      entry.ts,
+      entry.op,
+      entry.account,
+      entry.chain,
+      entry.to ?? null,
+      entry.value_eth ?? null,
+      entry.value_usd ?? null,
+      entry.gas_usd ?? null,
+      entry.hash ?? null,
+      entry.decision,
+      JSON.stringify(entry.reasons)
+    )
+  } catch {
+    // best-effort
+  }
+}
+
 // ─── Internal types ──────────────────────────────────────────────────────────
 
 type DbAccount = {

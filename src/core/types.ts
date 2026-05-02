@@ -57,11 +57,40 @@ export type Config = {
   testnets?: string[]
 }
 
+export type PolicyAccountRule = {
+  max_value_per_tx_usd?: number
+  max_daily_spend_usd?: number
+  allowed_chains?: string[]
+  allowed_contracts?: string[]
+  denied_contracts?: string[]
+  max_gas_usd?: number
+  require_simulation?: boolean
+}
+
 export type PolicyConfig = {
   version: number
   defaults: {
     require_simulation: boolean
     max_gas_usd: number
     max_value_per_tx_usd: number
+    max_daily_spend_usd?: number
+    allowed_chains?: string[]
+    allowed_contracts?: string[]
+    denied_contracts?: string[]
   }
+  accounts?: Record<string, PolicyAccountRule>
+}
+
+export type AuditEntry = {
+  ts: string
+  op: string
+  account: string
+  chain: string
+  to?: string
+  value_eth?: string
+  value_usd?: string
+  gas_usd?: string
+  hash?: string
+  decision: 'allow' | 'deny'
+  reasons: string[]
 }

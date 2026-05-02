@@ -166,7 +166,8 @@ export async function handleTxSign(opts: {
     // Policy evaluation
     const policy = loadPolicy()
     const ethPrice = opts.ethPriceUsd ?? 3000 // fallback if no oracle
-    const policyResult = evaluatePolicy(policy, envelope, ethPrice)
+    const fromAlias = listAccounts().find((a) => a.address.toLowerCase() === envelope.from.toLowerCase())?.alias ?? envelope.from
+    const policyResult = await evaluatePolicy(policy, envelope, ethPrice, fromAlias)
 
     if (policyResult.decision === 'deny') {
       return {

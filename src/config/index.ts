@@ -25,6 +25,10 @@ export function getStatePath(): string {
   return join(getChainuseDir(), 'state.db')
 }
 
+export function getAuditLogPath(): string {
+  return join(getChainuseDir(), 'audit.log')
+}
+
 export function isInitialized(): boolean {
   return existsSync(getConfigPath())
 }

@@ -89,6 +89,14 @@ import {
   handleSiweLogin,
 } from '../handlers/siwe.js'
 import {
+  handleLedgerAddress,
+  handleLedgerList,
+  handleLedgerSign,
+} from '../handlers/ledger.js'
+import { startDaemon } from '../services/daemon.js'
+import { writeFileSync, readFileSync, existsSync } from 'node:fs'
+import { getPolicyPath } from '../config/index.js'
+import {
   printResult,
   success,
   info,
@@ -474,31 +482,6 @@ export function buildCLI(): Command {
           label('Contract', formatAddress(data.contract))
           label('Slot', data.slot)
           label('Value', data.value)
-        },
-        parentOpts
-      )
-      if (!result.ok) process.exit(exitCodeFor(result.error.code))
-    })
-
-  // ─── chain policy ─────────────────────────────────────────────────────────────
-  const policyCmd = program.command('policy').description('Manage signing policy')
-
-  policyCmd
-    .command('show')
-    .description('Print the current policy configuration')
-    .action(async (_opts, cmd) => {
-      const parentOpts = cmd.parent?.parent?.opts() ?? {}
-      const result = await handlePolicyShow()
-      printResult(
-        result,
-        (data) => {
-          console.log()
-          console.log(chalk.bold('Policy Configuration:'))
-          label('Version', data.version.toString())
-          label('Require simulation', data.defaults.require_simulation.toString())
-          label('Max gas (USD)', `$${data.defaults.max_gas_usd.toFixed(2)}`)
-          label('Max value/tx (USD)', `$${data.defaults.max_value_per_tx_usd.toFixed(2)}`)
-          console.log()
         },
         parentOpts
       )
@@ -2022,6 +2005,168 @@ export function buildCLI(): Command {
         parentOpts
       )
       if (!result.ok) process.exit(exitCodeFor(result.error.code))
+    })
+
+  // ─── chain ledger ─────────────────────────────────────────────────────────
+
+  const ledgerCmd = program.command('ledger').description('Ledger hardware wallet commands')
+
+  ledgerCmd
+    .command('address')
+    .description('Show the EVM address at a derivation path')
+    .option('--path <path>', "Derivation path (default: m/44'/60'/0'/0/0)")
+    .action(async (opts) => {
+      const result = await handleLedgerAddress({ path: opts.path })
+      printResult(result, (data) => {
+        success('Ledger address')
+        label('Path', data.path)
+        label('Address', formatAddress(data.address))
+      }, {})
+      if (!result.ok) process.exit(exitCodeFor(result.error.code))
+    })
+
+  ledgerCmd
+    .command('list')
+    .description('List EVM addresses from Ledger')
+    .option('--count <n>', 'Number of addresses (default: 5)', (v) => parseInt(v), 5)
+    .option('--base <path>', "Base derivation path (default: m/44'/60'/0'/0)")
+    .action(async (opts) => {
+      const result = await handleLedgerList({ count: opts.count, base: opts.base })
+      printResult(result, (data) => {
+        success(`${data.length} addresses`)
+        for (const entry of data) {
+          label(`[${entry.index}] ${entry.path}`, formatAddress(entry.address))
+        }
+      }, {})
+      if (!result.ok) process.exit(exitCodeFor(result.error.code))
+    })
+
+  ledgerCmd
+    .command('sign')
+    .description('Sign a personal message with Ledger')
+    .requiredOption('--message <text>', 'Message to sign')
+    .option('--path <path>', "Derivation path (default: m/44'/60'/0'/0/0)")
+    .action(async (opts) => {
+      const result = await handleLedgerSign({ message: opts.message, path: opts.path })
+      printResult(result, (data) => {
+        success('Signed')
+        label('Signature', formatHash(data.signature))
+      }, {})
+      if (!result.ok) process.exit(exitCodeFor(result.error.code))
+    })
+
+  // ─── chain policy ─────────────────────────────────────────────────────────
+
+  const policyCmd = program.command('policy').description('Policy engine commands')
+
+  policyCmd
+    .command('show')
+    .description('Show current policy configuration')
+    .action(async (_opts, cmd) => {
+      const parentOpts = cmd.parent?.opts() ?? {}
+      const result = await handlePolicyShow()
+      printResult(result, (data) => {
+        success('Policy loaded')
+        console.log(chalk.dim(data.raw))
+      }, parentOpts)
+      if (!result.ok) process.exit(exitCodeFor(result.error.code))
+    })
+
+  policyCmd
+    .command('edit')
+    .description('Open policy.yaml in $EDITOR')
+    .action(async () => {
+      const { spawnSync } = await import('node:child_process')
+      const policyPath = getPolicyPath()
+      const editor = process.env.EDITOR ?? 'vi'
+      spawnSync(editor, [policyPath], { stdio: 'inherit' })
+    })
+
+  policyCmd
+    .command('check')
+    .description('Dry-run policy evaluation against a hypothetical transaction')
+    .requiredOption('--account <alias>', 'Account alias')
+    .requiredOption('--chain <id>', 'Chain ID (e.g. 1, 8453)')
+    .requiredOption('--to <address>', 'Target contract address')
+    .option('--value-eth <amount>', 'ETH value (default: 0)', '0')
+    .option('--eth-price <usd>', 'ETH price in USD for evaluation', '3000')
+    .action(async (opts) => {
+      const { loadPolicy, evaluatePolicy } = await import('../policy/index.js')
+      try {
+        const policy = loadPolicy()
+        const envelope = {
+          id: 'dry-run',
+          status: 'prepared' as const,
+          chainId: `eip155:${opts.chain}`,
+          from: '0x0000000000000000000000000000000000000000',
+          to: opts.to,
+          value: BigInt(Math.round(parseFloat(opts.valueEth ?? '0') * 1e18)),
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+        }
+        const decision = await evaluatePolicy(policy, envelope, parseFloat(opts.ethPrice ?? '3000'), opts.account)
+        if (decision.decision === 'allow') {
+          success('Policy: ALLOW')
+        } else {
+          warn('Policy: DENY')
+        }
+        for (const r of decision.reasons) label('Reason', r)
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err)
+        warn(msg)
+        process.exit(1)
+      }
+    })
+
+  // ─── chain audit ──────────────────────────────────────────────────────────
+
+  program
+    .command('audit')
+    .description('Show audit log entries')
+    .option('--account <alias>', 'Filter by account alias')
+    .option('--tail <n>', 'Show last N entries', (v) => parseInt(v), 20)
+    .option('--json', 'Output JSON')
+    .action(async (opts, cmd) => {
+      const parentOpts = cmd.parent?.opts() ?? {}
+      const { getAuditLogPath } = await import('../config/index.js')
+      const logPath = getAuditLogPath()
+      if (!existsSync(logPath)) {
+        info('No audit log entries yet')
+        return
+      }
+      const lines = readFileSync(logPath, 'utf-8')
+        .trim()
+        .split('\n')
+        .filter(Boolean)
+        .map((l) => {
+          try { return JSON.parse(l) } catch { return null }
+        })
+        .filter(Boolean)
+      const filtered = opts.account
+        ? lines.filter((e: { account: string }) => e.account === opts.account)
+        : lines
+      const tail = filtered.slice(-opts.tail)
+      if (parentOpts.json || opts.json) {
+        console.log(JSON.stringify({ ok: true, data: tail }, null, 2))
+        return
+      }
+      success(`${tail.length} audit entries`)
+      for (const e of tail) {
+        const ent = e as { ts: string; op: string; account: string; chain: string; to?: string; value_usd?: string; hash?: string; decision: string }
+        const dec = ent.decision === 'allow' ? chalk.green('ALLOW') : chalk.red('DENY')
+        console.log(`${chalk.dim(ent.ts)} [${dec}] ${chalk.bold(ent.op)} account=${ent.account} chain=${ent.chain}${ent.to ? ` to=${ent.to}` : ''}${ent.value_usd ? ` ~$${parseFloat(ent.value_usd).toFixed(2)}` : ''}${ent.hash ? ` tx=${ent.hash.slice(0, 12)}…` : ''}`)
+      }
+    })
+
+  // ─── chain daemon ─────────────────────────────────────────────────────────
+
+  program
+    .command('daemon')
+    .description('Start JSON-RPC 2.0 daemon (HTTP) for AI agent access')
+    .option('--port <n>', 'Port to listen on (default: 3131)', (v) => parseInt(v), 3131)
+    .option('--host <host>', 'Host to bind (default: 127.0.0.1)', '127.0.0.1')
+    .action(async (opts) => {
+      await startDaemon({ port: opts.port, host: opts.host })
     })
 
   return program
