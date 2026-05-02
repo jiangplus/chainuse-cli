@@ -51,13 +51,10 @@ export async function signSiweMessage(opts: {
   message: string
   privateKey: string
 }): Promise<{ signature: string; message: string }> {
-  const { createWalletClient, http } = await import('viem')
   const { privateKeyToAccount } = await import('viem/accounts')
 
   const account = privateKeyToAccount(opts.privateKey as `0x${string}`)
-  const client = createWalletClient({ account, transport: http() })
-
-  const signature = await client.signMessage({
+  const signature = await account.signMessage({
     message: opts.message,
   })
 

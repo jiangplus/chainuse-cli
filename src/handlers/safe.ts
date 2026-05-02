@@ -63,6 +63,17 @@ export async function handleSafeCreate(opts: {
   chain?: string
 }): Promise<JsonResult<{ address: string; owners: string[]; threshold: number }>> {
   try {
+    const { keystoreAliasExists } = await import('../keystore/index.js')
+    if (!keystoreAliasExists(opts.account)) {
+      return {
+        ok: false,
+        error: {
+          code: ErrorCode.ALIAS_NOT_FOUND,
+          message: `Account alias "${opts.account}" not found`,
+        },
+      }
+    }
+
     const config = loadConfig()
     const chainId = resolveChainFromConfig(config, opts.chain)
     const rpcUrl = getRpcUrl(chainId)

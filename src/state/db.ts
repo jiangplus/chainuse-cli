@@ -1,21 +1,19 @@
-import Database from 'better-sqlite3'
+import { openCompatDb, type CompatDB } from './db-compat.js'
 import { getStatePath } from '../config/index.js'
 
-let _db: Database.Database | null = null
+let _db: CompatDB | null = null
 
-export function openStateDb(): Database.Database {
+export function resetStateDb(): void { _db = null }
+
+export function openStateDb(): CompatDB {
   if (_db) return _db
-
   const dbPath = getStatePath()
-  _db = new Database(dbPath)
-  _db.pragma('journal_mode = WAL')
-  _db.pragma('foreign_keys = ON')
-
+  _db = openCompatDb(dbPath)
   migrate(_db)
   return _db
 }
 
-function migrate(db: Database.Database): void {
+function migrate(db: CompatDB): void {
   db.exec(`
     CREATE TABLE IF NOT EXISTS accounts (
       alias TEXT PRIMARY KEY,

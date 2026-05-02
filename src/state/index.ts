@@ -84,7 +84,7 @@ export function listSmartAccounts(chainId?: string): StoredAccount[] {
 
 export function smartAccountExists(alias: string): boolean {
   const db = openStateDb()
-  return db.prepare('SELECT 1 FROM smart_accounts WHERE alias = ?').get(alias) !== undefined
+  return db.prepare('SELECT 1 FROM smart_accounts WHERE alias = ?').get(alias) != null
 }
 
 // ─── Safe Transactions ───────────────────────────────────────────────────────
@@ -266,7 +266,7 @@ export function listAccounts(): Account[] {
 export function accountExists(alias: string): boolean {
   const db = openStateDb()
   const row = db.prepare('SELECT 1 FROM accounts WHERE alias = ?').get(alias)
-  return row !== undefined
+  return row != null
 }
 
 // ─── Transactions ─────────────────────────────────────────────────────────────

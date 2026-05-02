@@ -1,15 +1,16 @@
-import Database from 'better-sqlite3'
+import { openCompatDb, type CompatDB } from '../state/db-compat.js'
 import { scrypt } from '@noble/hashes/scrypt'
 import { randomBytes } from 'node:crypto'
 import { getKeystorePath } from '../config/index.js'
 
-let _db: Database.Database | null = null
+let _db: CompatDB | null = null
 
-function openKeystoreDb(): Database.Database {
+export function resetKeystoreDb(): void { _db = null }
+
+function openKeystoreDb(): CompatDB {
   if (_db) return _db
   const dbPath = getKeystorePath()
-  _db = new Database(dbPath)
-  _db.pragma('journal_mode = WAL')
+  _db = openCompatDb(dbPath)
   _db.exec(`
     CREATE TABLE IF NOT EXISTS keys (
       alias TEXT PRIMARY KEY,
@@ -124,5 +125,5 @@ export async function loadKey(alias: string, passphrase: string): Promise<KeyMat
 
 export function keystoreAliasExists(alias: string): boolean {
   const db = openKeystoreDb()
-  return db.prepare('SELECT 1 FROM keys WHERE alias = ?').get(alias) !== undefined
+  return db.prepare('SELECT 1 FROM keys WHERE alias = ?').get(alias) != null
 }

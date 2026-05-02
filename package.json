@@ -9,7 +9,8 @@
   "scripts": {
     "dev": "bun run src/index.ts",
     "build": "tsc --project tsconfig.json && chmod +x dist/index.js",
-    "test": "echo \"No tests in M1\" && exit 0",
+    "test": "bun test",
+    "test:live": "CHAINUSE_TEST_LIVE=1 bun test",
     "clean": "rm -rf dist"
   },
   "dependencies": {
