@@ -1,0 +1,43 @@
+package.json
+  e94f2536cf53ff87 18-19,31
+src/handlers/price.ts
+  e94f2536cf53ff87 21,23-24,27-28
+src/handlers/deploy.ts
+  e94f2536cf53ff87 98
+src/services/erc4337.ts
+  e94f2536cf53ff87 1-192
+src/handlers/account.ts
+  e94f2536cf53ff87 1-481
+src/state/index.ts
+  e94f2536cf53ff87 4-206
+src/services/erc7702.ts
+  e94f2536cf53ff87 1-66
+src/services/safe.ts
+  e94f2536cf53ff87 1-309
+src/state/db.ts
+  e94f2536cf53ff87 68-94
+src/handlers/safe.ts
+  e94f2536cf53ff87 1-310
+src/cli/index.ts
+  e94f2536cf53ff87 48-61,378,1013,1082,1103-1420
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "14af7461ac8b4b8750ab099f72f2dfbb53739f48",
+  "prompts": {
+    "e94f2536cf53ff87": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c23f4e2f-3390-40c9-ae25-9fb10af6af5a",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "jiangplus",
+      "messages": [],
+      "total_additions": 1974,
+      "total_deletions": 49,
+      "accepted_lines": 1933,
+      "overriden_lines": 0
+    }
+  }
+}
