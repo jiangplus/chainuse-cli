@@ -1,0 +1,29 @@
+package.json
+  e94f2536cf53ff87 23,48-49
+mcp-config.example.json
+  e94f2536cf53ff87 1-12
+src/services/mcp.ts
+  e94f2536cf53ff87 1-381
+src/cli/index.ts
+  e94f2536cf53ff87 97,2173-2210
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "8fa57981eb151f5535f07f9a09ffaa165ea6f372",
+  "prompts": {
+    "e94f2536cf53ff87": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c23f4e2f-3390-40c9-ae25-9fb10af6af5a",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "jiangplus",
+      "messages": [],
+      "total_additions": 440,
+      "total_deletions": 6,
+      "accepted_lines": 435,
+      "overriden_lines": 0
+    }
+  }
+}
