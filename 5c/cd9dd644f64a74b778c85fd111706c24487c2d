@@ -1,0 +1,51 @@
+src/chains/evm/index.ts
+  e94f2536cf53ff87 11,13-16,19-25,28-37
+src/handlers/price.ts
+  e94f2536cf53ff87 1-103
+src/cli/index.ts
+  e94f2536cf53ff87 20-46,458-1081
+src/state/db.ts
+  e94f2536cf53ff87 56-67
+src/services/price-chainlink.ts
+  e94f2536cf53ff87 1-56
+src/services/ens.ts
+  e94f2536cf53ff87 1-72
+src/handlers/deploy.ts
+  e94f2536cf53ff87 1-213
+src/services/tokens-erc20.ts
+  e94f2536cf53ff87 1-99
+src/services/tokens-erc1155.ts
+  e94f2536cf53ff87 1-95
+src/services/deploy-evm.ts
+  e94f2536cf53ff87 1-105
+src/handlers/ens.ts
+  e94f2536cf53ff87 1-258
+src/registries/chainlink-feeds.ts
+  e94f2536cf53ff87 1-37
+src/handlers/tokens.ts
+  e94f2536cf53ff87 1-570
+src/services/tokens-erc721.ts
+  e94f2536cf53ff87 1-87
+src/state/index.ts
+  e94f2536cf53ff87 4-16,119-160,192-215
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "5ccd9dd644f64a74b778c85fd111706c24487c2d",
+  "prompts": {
+    "e94f2536cf53ff87": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c23f4e2f-3390-40c9-ae25-9fb10af6af5a",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "jiangplus",
+      "messages": [],
+      "total_additions": 2465,
+      "total_deletions": 14,
+      "accepted_lines": 2460,
+      "overriden_lines": 0
+    }
+  }
+}
