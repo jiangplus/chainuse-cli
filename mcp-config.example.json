@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "chainuse": {
+      "command": "chain",
+      "args": ["mcp", "stdio"],
+      "env": {
+        "CHAINUSE_PASSPHRASE": "your-keystore-passphrase",
+        "ALCHEMY_API_KEY": "your-alchemy-key"
+      }
+    }
+  }
+}

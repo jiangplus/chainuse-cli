@@ -94,6 +94,7 @@ import {
   handleLedgerSign,
 } from '../handlers/ledger.js'
 import { startDaemon } from '../services/daemon.js'
+import { startMcpStdio, startMcpHttp } from '../services/mcp.js'
 import { writeFileSync, readFileSync, existsSync } from 'node:fs'
 import { getPolicyPath } from '../config/index.js'
 import {
@@ -2167,6 +2168,44 @@ export function buildCLI(): Command {
     .option('--host <host>', 'Host to bind (default: 127.0.0.1)', '127.0.0.1')
     .action(async (opts) => {
       await startDaemon({ port: opts.port, host: opts.host })
+    })
+
+  // ─── chain mcp ────────────────────────────────────────────────────────────
+
+  const mcpCmd = program
+    .command('mcp')
+    .description('Start the MCP (Model Context Protocol) server for AI agent integration')
+
+  mcpCmd
+    .command('stdio')
+    .description('Run MCP server over stdin/stdout (for Claude Desktop, Cursor, etc.)')
+    .action(async () => {
+      await startMcpStdio()
+    })
+
+  mcpCmd
+    .command('http')
+    .description('Run MCP server over Streamable HTTP (for remote AI agents)')
+    .option('--port <n>', 'Port (default: 3132)', (v) => parseInt(v), 3132)
+    .option('--host <host>', 'Host (default: 127.0.0.1)', '127.0.0.1')
+    .action(async (opts) => {
+      await startMcpHttp({ port: opts.port, host: opts.host })
+    })
+
+  mcpCmd
+    .command('tools')
+    .description('List all registered MCP tools')
+    .action(async () => {
+      const { createMcpServer } = await import('../services/mcp.js')
+      const server = await createMcpServer()
+      // Access registered tools via the internal registry
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const tools = (server as unknown as { _registeredTools: Record<string, { description?: string }> })._registeredTools
+      const names = Object.keys(tools).sort()
+      success(`${names.length} MCP tools registered`)
+      for (const name of names) {
+        label(name, tools[name]?.description?.split('.')[0] ?? '')
+      }
     })
 
   return program
