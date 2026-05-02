@@ -101,15 +101,17 @@ export function buildCLI(): Command {
   keysCmd
     .command('generate')
     .description('Generate a new EOA from BIP-39 mnemonic')
-    .requiredOption('--chain <chain>', 'Chain type (evm)')
+    .requiredOption('--chain <chain>', 'Chain type (evm, solana, btc, sui)')
     .option('--alias <name>', 'Human-readable alias for this key')
     .option('--passphrase <pass>', 'Encryption passphrase (or set CHAINUSE_PASSPHRASE)')
+    .option('--network <network>', 'Network for BTC: mainnet or testnet (default: mainnet)')
     .action(async (opts, cmd) => {
       const parentOpts = cmd.parent?.parent?.opts() ?? {}
       const result = await handleKeysGenerate({
         chain: opts.chain,
         alias: opts.alias,
         passphrase: opts.passphrase,
+        network: opts.network,
       })
       printResult(
         result,
@@ -139,6 +141,7 @@ export function buildCLI(): Command {
     .option('--chain <chain>', 'Chain type (default: evm)')
     .option('--path <derivationPath>', 'BIP-44 derivation path')
     .option('--passphrase <pass>', 'Encryption passphrase (or set CHAINUSE_PASSPHRASE)')
+    .option('--network <network>', 'Network for BTC: mainnet or testnet (default: mainnet)')
     .action(async (value, opts, cmd) => {
       const parentOpts = cmd.parent?.parent?.opts() ?? {}
       if (opts.from !== 'mnemonic' && opts.from !== 'privkey') {
@@ -152,6 +155,7 @@ export function buildCLI(): Command {
         chain: opts.chain,
         derivationPath: opts.path,
         passphrase: opts.passphrase,
+        network: opts.network,
       })
       printResult(
         result,
@@ -225,14 +229,15 @@ export function buildCLI(): Command {
   // ─── chain send ──────────────────────────────────────────────────────────────
   program
     .command('send')
-    .description('Send native ETH or ERC-20 tokens (two-phase or one-shot)')
+    .description('Send native tokens or assets (EVM, Solana, Bitcoin, Sui)')
     .requiredOption('--to <address>', 'Destination address')
-    .requiredOption('--amount <value>', 'Amount to send (in ETH or token units)')
+    .requiredOption('--amount <value>', 'Amount to send (SOL, BTC, SUI, or ETH units)')
     .option('--asset <asset>', 'Asset: "native" or "ERC20:0x..." (default: native)')
     .option('--account <alias>', 'Sending account alias')
-    .option('--chain <id>', 'Chain ID or alias')
+    .option('--chain <id>', 'Chain ID or alias (e.g. solana, bitcoin, sui, mainnet)')
     .option('--one-shot', 'Prepare, sign, and send in one step')
     .option('--passphrase <pass>', 'Encryption passphrase (or set CHAINUSE_PASSPHRASE)')
+    .option('--fee-rate <sats>', 'BTC fee rate in sats/vbyte (default: recommended halfHourFee)')
     .action(async (opts, cmd) => {
       const parentOpts = cmd.parent?.opts() ?? {}
       const result = await handleSend({
@@ -243,6 +248,7 @@ export function buildCLI(): Command {
         chain: opts.chain,
         oneShot: opts.oneShot,
         passphrase: opts.passphrase,
+        feeRate: opts.feeRate ? parseInt(opts.feeRate, 10) : undefined,
       })
       printResult(
         result,
