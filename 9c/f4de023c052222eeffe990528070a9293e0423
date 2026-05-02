@@ -1,0 +1,51 @@
+src/accounts/solana-keypair.ts
+  e94f2536cf53ff87 1-47
+src/chains/resolve.ts
+  e94f2536cf53ff87 1-85
+src/accounts/btc-bip84.ts
+  e94f2536cf53ff87 1-82
+src/handlers/send.ts
+  e94f2536cf53ff87 2-4,6-7,9-16,66,94-366
+src/config/index.ts
+  e94f2536cf53ff87 6,45-71
+src/handlers/balance.ts
+  e94f2536cf53ff87 2,7-10,37-57,59-73,78-138
+src/chains/solana/index.ts
+  e94f2536cf53ff87 1-86
+src/chains/btc/index.ts
+  e94f2536cf53ff87 1-155
+src/handlers/keys.ts
+  e94f2536cf53ff87 1-2,4-6,31,34-69,71-77,82-116,119-120,124-158,160-163,166-185,187-213,238,242,244-282,284-286,289-329,331,334-338,340-373,375-377,380-383,385-423,427-431,435
+package.json
+  e94f2536cf53ff87 16,20-21,23,27,29,34,36-38
+src/accounts/sui-ed25519.ts
+  e94f2536cf53ff87 1-46
+src/cli/index.ts
+  e94f2536cf53ff87 104,107,114,144,158,232,234,237,240,251
+src/index.ts
+  e94f2536cf53ff87 2-8
+src/chains/sui/index.ts
+  e94f2536cf53ff87 1-62
+src/config/defaults.ts
+  e94f2536cf53ff87 20-38,42-44
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "9cf4de023c052222eeffe990528070a9293e0423",
+  "prompts": {
+    "e94f2536cf53ff87": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c23f4e2f-3390-40c9-ae25-9fb10af6af5a",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "jiangplus",
+      "messages": [],
+      "total_additions": 1420,
+      "total_deletions": 157,
+      "accepted_lines": 1384,
+      "overriden_lines": 0
+    }
+  }
+}
